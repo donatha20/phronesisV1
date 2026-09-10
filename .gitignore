@@ -1,0 +1,49 @@
+# ---- OS / editor ----
+.DS_Store
+*.iml
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# ---- Secrets / env ----
+.env
+.env.*
+!.env.example
+*.keystore
+!apps/android/debug.keystore
+debug.keystore
+local.properties
+
+# ---- Android ----
+.gradle/
+.kotlin/
+**/build/
+/captures
+.externalNativeBuild
+.cxx
+
+# ---- Web ----
+node_modules/
+apps/web/dist/
+apps/web/.vite/
+.vite/
+
+# ---- Python / Django ----
+.venv/
+__pycache__/
+*.py[cod]
+*.sqlite3
+services/api/staticfiles/
+services/api/mediafiles/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# ---- Terraform ----
+infra/**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example

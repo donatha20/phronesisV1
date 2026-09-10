@@ -1,0 +1,36 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: phronesis
+      POSTGRES_USER: phronesis
+      POSTGRES_PASSWORD: phronesis
+    ports: ["5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U phronesis"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7
+    ports: ["6379:6379"]
+
+  api:
+    build: ./services/api
+    command: python manage.py runserver 0.0.0.0:8000
+    working_dir: /app
+    volumes: ["./services/api:/app"]
+    ports: ["8000:8000"]
+    env_file: ./services/api/.env
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.dev
+      DATABASE_URL: postgres://phronesis:phronesis@db:5432/phronesis
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_started }
+
+volumes:
+  pgdata:

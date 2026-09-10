@@ -1,0 +1,12 @@
+{
+  "name": "Phronesis Mentorship",
+  "description": "Cross-generational Christian mentorship app connecting young believers and senior elders for spiritual wisdom, daily devotion posting, podcast media hub, 5 life spheres goal tracking, Google Drive resource integration, and Google Calendar & Google Meet live discipleship scheduling.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
+
