@@ -21,8 +21,6 @@ urlpatterns = [
     path("api/", include((api_patterns, "api"))),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="docs"),
-    # allauth needs its own namespace for the OAuth callback dance
-    path("accounts/", include("allauth.urls")),
 ]
 
 if settings.DEBUG:

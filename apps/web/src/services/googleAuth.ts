@@ -1,129 +1,50 @@
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import { 
-  getAuth, 
-  signInWithPopup, 
-  GoogleAuthProvider, 
-  onAuthStateChanged, 
-  User, 
-  signOut 
-} from 'firebase/auth';
-import firebaseConfig from '../../firebase-applet-config.json';
+/**
+ * Google Workspace (Drive / Calendar / Meet) connection shim.
+ *
+ * Firebase has been removed. Application sign-in now lives in `src/auth/`
+ * (cookie-JWT against the Django API, plus "Login with Google" via a
+ * server-side redirect).
+ *
+ * Workspace *data* access is a SEPARATE concern and is being moved server-side:
+ * the Django backend will broker Drive/Calendar/Meet calls with a stored,
+ * encrypted refresh token (migration phase P5, endpoints under
+ * `/api/integrations/google/`). Until that lands, these functions report the
+ * feature as unavailable so the Drive/Calendar views degrade gracefully
+ * instead of calling Google directly from the browser.
+ */
 
-// Initialize Firebase App singleton safely
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
-export const auth = getAuth(app);
+export interface GoogleWorkspaceUser {
+  email: string;
+  displayName?: string;
+}
 
-// Configure Google Auth Provider with Google Drive, Calendar, and Meet Scopes
-export const WORKSPACE_SCOPES = [
-  // Drive Scopes
-  'https://www.googleapis.com/auth/drive',
-  'https://www.googleapis.com/auth/drive.file',
-  'https://www.googleapis.com/auth/drive.readonly',
-  'https://www.googleapis.com/auth/drive.metadata.readonly',
-  // Calendar Scopes
-  'https://www.googleapis.com/auth/calendar',
-  'https://www.googleapis.com/auth/calendar.events',
-  'https://www.googleapis.com/auth/calendar.readonly',
-  'https://www.googleapis.com/auth/calendar.settings.readonly',
-  // Meet Scopes
-  'https://www.googleapis.com/auth/meetings.space.created',
-  'https://www.googleapis.com/auth/meetings.space.readonly',
-  'https://www.googleapis.com/auth/meetings.space.settings'
-];
+const NOT_AVAILABLE_MESSAGE =
+  'Google Workspace access is being migrated to the Phronesis backend and will be available again shortly.';
 
-export const DRIVE_SCOPES = WORKSPACE_SCOPES;
+/** No live browser-side session anymore. */
+export const getAccessToken = async (): Promise<string | null> => null;
 
-const provider = new GoogleAuthProvider();
-WORKSPACE_SCOPES.forEach(scope => provider.addScope(scope));
-provider.setCustomParameters({
-  prompt: 'select_account'
-});
-
-// Flag to track sign-in in progress
-let isSigningIn = false;
-
-// In-Memory Token Cache (MANDATORY: Never stored in localStorage or sessionStorage)
-let cachedAccessToken: string | null = null;
-let currentGoogleUser: User | null = null;
+export const getCurrentGoogleUser = (): GoogleWorkspaceUser | null => null;
 
 /**
- * Initialize Auth state listener
+ * Previously subscribed to Firebase auth state. Now a no-op that immediately
+ * signals "not connected" and returns an unsubscribe function.
  */
 export const initAuth = (
-  onAuthSuccess?: (user: User, token: string) => void,
-  onAuthFailure?: () => void
-) => {
-  return onAuthStateChanged(auth, async (user: User | null) => {
-    currentGoogleUser = user;
-    if (user) {
-      if (cachedAccessToken) {
-        if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
-      } else if (!isSigningIn) {
-        // User is logged in to Firebase, but access token needs retrieval via interactive sign-in
-        if (onAuthFailure) onAuthFailure();
-      }
-    } else {
-      cachedAccessToken = null;
-      if (onAuthFailure) onAuthFailure();
-    }
-  });
+  _onConnected?: (user: GoogleWorkspaceUser, token: string) => void,
+  onNotConnected?: () => void,
+): (() => void) => {
+  onNotConnected?.();
+  return () => {};
 };
 
-/**
- * Sign in with Google Popup and retrieve Google OAuth Access Token
- */
-export const signInWithGoogleDrive = async (): Promise<{ user: User; accessToken: string } | null> => {
-  try {
-    isSigningIn = true;
-    const result = await signInWithPopup(auth, provider);
-    const credential = GoogleAuthProvider.credentialFromResult(result);
-    
-    if (!credential?.accessToken) {
-      throw new Error('No Google OAuth access token returned from authentication.');
-    }
-
-    cachedAccessToken = credential.accessToken;
-    currentGoogleUser = result.user;
-    return { user: result.user, accessToken: cachedAccessToken };
-  } catch (error: any) {
-    console.error('Google Drive sign in error:', error);
-    throw error;
-  } finally {
-    isSigningIn = false;
-  }
+export const signInWithGoogleDrive = async (): Promise<{
+  user: GoogleWorkspaceUser;
+  accessToken: string;
+} | null> => {
+  throw new Error(NOT_AVAILABLE_MESSAGE);
 };
 
-/**
- * Get current in-memory access token
- */
-export const getAccessToken = async (): Promise<string | null> => {
-  return cachedAccessToken;
-};
-
-/**
- * Set in-memory access token manually if supplied
- */
-export const setCachedAccessToken = (token: string | null) => {
-  cachedAccessToken = token;
-};
-
-/**
- * Get current Google User
- */
-export const getCurrentGoogleUser = (): User | null => {
-  return currentGoogleUser;
-};
-
-/**
- * Sign out and clear cached token
- */
-export const googleLogout = async () => {
-  try {
-    await signOut(auth);
-  } catch (err) {
-    console.error('Error during sign out:', err);
-  } finally {
-    cachedAccessToken = null;
-    currentGoogleUser = null;
-  }
+export const googleLogout = async (): Promise<void> => {
+  /* nothing to tear down */
 };

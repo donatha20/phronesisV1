@@ -38,8 +38,7 @@ INSTALLED_APPS = [
     "drf_spectacular",
     "allauth",
     "allauth.account",
-    "allauth.socialaccount",
-    "allauth.socialaccount.providers.google",
+    "allauth.socialaccount",  # required by dj_rest_auth.registration import chain
     "dj_rest_auth",
     "dj_rest_auth.registration",
     # local
@@ -125,22 +124,23 @@ AUTH_PASSWORD_VALIDATORS = [
 # allauth — email-first, no username field on the user model
 ACCOUNT_LOGIN_METHODS = {"email"}
 ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]
-ACCOUNT_EMAIL_VERIFICATION = "optional"
+# Email verification is out of scope for P3 (no transactional-mail provider yet).
+# Revisit as its own task: set to "mandatory" + wire the confirm-email route.
+ACCOUNT_EMAIL_VERIFICATION = "none"
 ACCOUNT_UNIQUE_EMAIL = True
 ACCOUNT_USER_MODEL_USERNAME_FIELD = None
 ACCOUNT_USER_MODEL_EMAIL_FIELD = "email"
-SOCIALACCOUNT_PROVIDERS = {
-    "google": {
-        "APPS": [
-            {
-                "client_id": env("GOOGLE_OIDC_CLIENT_ID", default=""),
-                "secret": env("GOOGLE_OIDC_CLIENT_SECRET", default=""),
-                "key": "",
-            }
-        ],
-        "SCOPE": ["openid", "email", "profile"],
-        "AUTH_PARAMS": {"access_type": "online"},
-    }
+
+# "Login with Google" — hand-rolled server-side authorization-code flow
+# (apps/accounts/google_oauth.py). Identity only: scopes openid/email/profile.
+FRONTEND_URL = env("FRONTEND_URL", default="http://localhost:3000")
+GOOGLE_LOGIN = {
+    "CLIENT_ID": env("GOOGLE_OIDC_CLIENT_ID", default=""),
+    "CLIENT_SECRET": env("GOOGLE_OIDC_CLIENT_SECRET", default=""),
+    "REDIRECT_URI": env(
+        "GOOGLE_OIDC_REDIRECT_URI",
+        default="http://localhost:8000/api/auth/google/callback",
+    ),
 }
 
 # ---------------------------------------------------------------------------
@@ -176,8 +176,10 @@ REST_AUTH = {
     "JWT_AUTH_COOKIE": "phronesis-access",
     "JWT_AUTH_REFRESH_COOKIE": "phronesis-refresh",
     "JWT_AUTH_HTTPONLY": True,
-    "JWT_AUTH_SAMESITE": "Lax",
+    "JWT_AUTH_SAMESITE": env("JWT_COOKIE_SAMESITE", default="Lax"),
     "JWT_AUTH_SECURE": env.bool("JWT_COOKIE_SECURE", default=False),
+    "JWT_AUTH_COOKIE_USE_CSRF": True,
+    "JWT_AUTH_COOKIE_ENFORCE_CSRF_ON_UNAUTHENTICATED": False,
     "SESSION_LOGIN": False,
     "USER_DETAILS_SERIALIZER": "apps.accounts.serializers.UserSerializer",
     "REGISTER_SERIALIZER": "apps.accounts.serializers.RegisterSerializer",
@@ -197,6 +199,13 @@ SPECTACULAR_SETTINGS = {
 CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=["http://localhost:3000"])
 CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=["http://localhost:3000"])
+
+# The SPA reads the csrftoken cookie and echoes it as X-CSRFToken on unsafe
+# requests (dj-rest-auth's JWTCookieAuthentication enforces CSRF).
+CSRF_COOKIE_HTTPONLY = False
+CSRF_COOKIE_SAMESITE = env("CSRF_COOKIE_SAMESITE", default="Lax")
+SESSION_COOKIE_SAMESITE = env("SESSION_COOKIE_SAMESITE", default="Lax")
+CSRF_HEADER_NAME = "HTTP_X_CSRFTOKEN"
 
 # ---------------------------------------------------------------------------
 # i18n / tz

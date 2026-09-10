@@ -1,10 +1,10 @@
 import React from 'react';
-import { 
-  Sparkles, Shield, Compass, BookOpen, Radio, Target, 
-  Video, Lock, Users, FolderOpen, ChevronDown, Check, Flame,
-  HardDrive, CalendarDays
+import {
+  Sparkles, Shield, Compass, BookOpen, Radio, Target,
+  Video, Lock, Users, FolderOpen, ChevronDown, Flame,
+  HardDrive, CalendarDays, LogOut
 } from 'lucide-react';
-import { UserProfile, UserRole } from '../types';
+import { UserProfile } from '../types';
 
 export type ActiveTab = 
   | 'DASHBOARD'
@@ -23,20 +23,24 @@ interface HeaderProps {
   activeTab: ActiveTab;
   setActiveTab: (tab: ActiveTab) => void;
   currentUser: UserProfile;
-  availableUsers: UserProfile[];
-  onSwitchUser: (user: UserProfile) => void;
+  onLogout: () => void;
   onOpenAssistant: () => void;
 }
+
+const ROLE_LABEL: Record<string, string> = {
+  MENTOR_ELDER: 'Elder Mentor',
+  YOUNG_BELIEVER_MENTEE: 'Young Believer',
+  ADMIN: 'Administrator',
+};
 
 export const Header: React.FC<HeaderProps> = ({
   activeTab,
   setActiveTab,
   currentUser,
-  availableUsers,
-  onSwitchUser,
+  onLogout,
   onOpenAssistant
 }) => {
-  const [isRoleDropdownOpen, setIsRoleDropdownOpen] = React.useState(false);
+  const [isUserMenuOpen, setIsUserMenuOpen] = React.useState(false);
 
   const navItems: { id: ActiveTab; label: string; icon: React.FC<{ className?: string }> }[] = [
     { id: 'DASHBOARD', label: 'Overview', icon: Compass },
@@ -94,53 +98,40 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="md:hidden">Assistant</span>
             </button>
 
-            {/* Role / Profile Switcher */}
+            {/* Authenticated user menu */}
             <div className="relative">
               <button
-                onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)}
-                className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-750 border border-stone-700 text-xs text-stone-200 transition"
+                onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 border border-stone-700 text-xs text-stone-200 transition"
               >
                 <div className="w-6 h-6 rounded-full bg-amber-600/30 text-amber-300 border border-amber-500/40 flex items-center justify-center font-bold text-xs">
                   {currentUser.avatarInitial}
                 </div>
                 <div className="text-left hidden lg:block">
                   <div className="font-semibold text-stone-100 leading-tight">{currentUser.name}</div>
-                  <div className="text-[10px] text-amber-400">{currentUser.role === 'MENTOR_ELDER' ? 'Elder Mentor' : 'Young Believer'}</div>
+                  <div className="text-[10px] text-amber-400">
+                    {ROLE_LABEL[currentUser.role] ?? currentUser.role}
+                  </div>
                 </div>
                 <ChevronDown className="w-3.5 h-3.5 text-stone-400" />
               </button>
 
-              {isRoleDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-72 rounded-2xl bg-stone-900 border border-stone-700 shadow-2xl p-2 z-50 text-xs space-y-1">
-                  <div className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-stone-400 border-b border-stone-800">
-                    Switch Active Persona (Mentee / Mentor View)
+              {isUserMenuOpen && (
+                <div className="absolute right-0 mt-2 w-64 rounded-2xl bg-stone-900 border border-stone-700 shadow-2xl p-2 z-50 text-xs">
+                  <div className="px-3 py-2 border-b border-stone-800">
+                    <div className="font-semibold text-stone-100 truncate">{currentUser.name}</div>
+                    <div className="text-[10px] text-stone-400 truncate">{currentUser.email}</div>
                   </div>
-                  {availableUsers.map((u) => {
-                    const isSelected = u.id === currentUser.id;
-                    return (
-                      <button
-                        key={u.id}
-                        onClick={() => {
-                          onSwitchUser(u);
-                          setIsRoleDropdownOpen(false);
-                        }}
-                        className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left transition ${
-                          isSelected ? 'bg-amber-600/20 text-amber-300 border border-amber-500/40' : 'text-stone-300 hover:bg-stone-800'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5 truncate">
-                          <div className="w-7 h-7 rounded-full bg-stone-800 border border-stone-700 flex items-center justify-center font-bold text-amber-400 shrink-0">
-                            {u.avatarInitial}
-                          </div>
-                          <div className="truncate">
-                            <div className="font-semibold text-stone-100 truncate">{u.name}</div>
-                            <div className="text-[10px] text-stone-400 truncate">{u.title}</div>
-                          </div>
-                        </div>
-                        {isSelected && <Check className="w-4 h-4 text-amber-400 shrink-0 ml-2" />}
-                      </button>
-                    );
-                  })}
+                  <button
+                    onClick={() => {
+                      setIsUserMenuOpen(false);
+                      onLogout();
+                    }}
+                    className="mt-1 w-full flex items-center gap-2 p-2.5 rounded-xl text-left text-stone-300 hover:bg-stone-800 transition"
+                  >
+                    <LogOut className="w-4 h-4 text-stone-400" />
+                    Sign out
+                  </button>
                 </div>
               )}
             </div>

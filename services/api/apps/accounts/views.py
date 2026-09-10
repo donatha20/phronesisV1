@@ -1,21 +1,37 @@
 from __future__ import annotations
 
-from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
-from allauth.socialaccount.providers.oauth2.client import OAuth2Client
-from dj_rest_auth.registration.views import SocialLoginView
+import secrets
+from urllib.parse import urlencode
+
+from dj_rest_auth.jwt_auth import set_jwt_cookies
 from dj_rest_auth.views import LoginView, LogoutView
 from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.contrib.auth.models import update_last_login
+from django.http import HttpRequest, HttpResponseRedirect
+from django.utils import timezone
+from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.http import require_GET
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.audit.models import AuditAction
 from apps.audit.services import record
 
+from .google_oauth import GoogleOAuthError, build_authorization_url, exchange_code_for_identity
 
+User = get_user_model()
+
+_STATE_COOKIE = "g_oauth_state"
+_STATE_COOKIE_PATH = "/api/auth/google/"
+_STATE_MAX_AGE = 600  # 10 minutes
+
+
+# ---------------------------------------------------------------------------
+# email / password
+# ---------------------------------------------------------------------------
 class AuditedLoginView(LoginView):
-    """dj-rest-auth login that also writes an audit row.
-
-    The JWT login path does not call ``django.contrib.auth.login()``, so the
-    ``user_logged_in`` signal never fires — we record the event explicitly here.
-    """
+    """dj-rest-auth login that also writes an audit row (the JWT login path
+    never calls ``django.contrib.auth.login()`` so the signal does not fire)."""
 
     def get_response(self):  # type: ignore[no-untyped-def]
         response = super().get_response()
@@ -33,21 +49,99 @@ class AuditedLogoutView(LogoutView):
         return response
 
 
-class GoogleLoginView(SocialLoginView):
-    """`POST /api/auth/google/` — "Login with Google" option.
+@require_GET
+@ensure_csrf_cookie
+def csrf_view(request: HttpRequest):
+    """Frontend calls this once on load to obtain the ``csrftoken`` cookie
+    before issuing unsafe requests against the cookie-JWT API."""
+    from django.http import JsonResponse
 
-    Accepts either an ``access_token`` or an authorization ``code`` from the
-    web client, verifies it with Google, creates/links the local user, and
-    returns the same JWT cookie pair as email/password login.
+    return JsonResponse({"detail": "CSRF cookie set"})
 
-    Scopes are limited to ``openid email profile`` (see SOCIALACCOUNT_PROVIDERS).
-    This is *identity only* — Drive/Calendar/Meet access is a separate flow under
-    ``/api/integrations/google/``.
-    """
 
-    adapter_class = GoogleOAuth2Adapter
-    client_class = OAuth2Client
+# ---------------------------------------------------------------------------
+# Login with Google — full-page redirect (authorization-code flow)
+# ---------------------------------------------------------------------------
+def _frontend_redirect(path: str, **params: str) -> HttpResponseRedirect:
+    url = settings.FRONTEND_URL.rstrip("/") + path
+    if params:
+        url = f"{url}?{urlencode(params)}"
+    return HttpResponseRedirect(url)
 
-    @property
-    def callback_url(self) -> str:
-        return f"{settings.CORS_ALLOWED_ORIGINS[0]}/auth/google/callback"
+
+@require_GET
+def google_authorize_view(request: HttpRequest):
+    """Step 1: send the browser to Google's consent screen."""
+    try:
+        auth_url, state = build_authorization_url()
+    except GoogleOAuthError as exc:
+        return _frontend_redirect("/login", error=exc.code)
+
+    response = HttpResponseRedirect(auth_url)
+    response.set_cookie(
+        _STATE_COOKIE,
+        state,
+        max_age=_STATE_MAX_AGE,
+        path=_STATE_COOKIE_PATH,
+        secure=not settings.DEBUG,
+        httponly=True,
+        samesite="Lax",
+    )
+    return response
+
+
+@require_GET
+def google_callback_view(request: HttpRequest):
+    """Step 2: Google redirects back here with ``code`` + ``state``. We verify,
+    upsert the user, set JWT cookies, and bounce to the SPA callback route."""
+    def _fail(code: str) -> HttpResponseRedirect:
+        record(AuditAction.LOGIN_FAILED, metadata={"method": "google", "reason": code})
+        resp = _frontend_redirect("/login", error=code)
+        resp.delete_cookie(_STATE_COOKIE, path=_STATE_COOKIE_PATH)
+        return resp
+
+    if request.GET.get("error"):
+        return _fail(request.GET["error"])  # e.g. access_denied
+
+    code = request.GET.get("code", "")
+    state = request.GET.get("state", "")
+    expected_state = request.COOKIES.get(_STATE_COOKIE, "")
+    if not code or not state or not expected_state or not secrets.compare_digest(state, expected_state):
+        return _fail("state_mismatch")
+
+    try:
+        identity = exchange_code_for_identity(code=code, state=state)
+    except GoogleOAuthError as exc:
+        return _fail(exc.code)
+
+    user, created = User.objects.get_or_create(
+        email=identity.email,
+        defaults={
+            "first_name": identity.given_name,
+            "last_name": identity.family_name,
+            "role": "mentee",
+        },
+    )
+    if not user.is_active:
+        return _fail("account_disabled")
+    if created:
+        user.set_unusable_password()
+        user.save(update_fields=["password"])
+        record(AuditAction.REGISTER, actor=user, metadata={"method": "google"})
+
+    update_last_login(None, user)
+    record(AuditAction.LOGIN, actor=user, metadata={"method": "google", "new_account": created})
+
+    refresh = RefreshToken.for_user(user)
+    response = _frontend_redirect(
+        "/auth/callback",
+        status="success",
+        new="1" if (created or not user.profile_completed) else "0",
+    )
+    set_jwt_cookies(response, str(refresh.access_token), str(refresh))
+    response.delete_cookie(_STATE_COOKIE, path=_STATE_COOKIE_PATH)
+    # touch security settings row
+    from .models import SecuritySettings
+
+    SecuritySettings.objects.get_or_create(user=user, defaults={"last_password_change_at": timezone.now()})
+    return response

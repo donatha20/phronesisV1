@@ -1,13 +1,14 @@
-import React, { useState } from 'react';
-import { 
-  UserProfile, DailyDevotion, GoalItem, 
-  PodcastEpisode, DiscipleshipSession, PrayerRequest, 
-  ResourceItem, SecuritySettings 
+import React, { useMemo, useState } from 'react';
+import { Loader2 } from 'lucide-react';
+import {
+  UserProfile, DailyDevotion, GoalItem,
+  PodcastEpisode, DiscipleshipSession, PrayerRequest,
+  ResourceItem, SecuritySettings
 } from './types';
-import { 
-  initialMentors, initialMentees, initialGoals, 
-  initialDevotions, initialPodcasts, initialSessions, 
-  initialPrayers, initialResources, initialSecurity 
+import {
+  initialMentors, initialMentees, initialGoals,
+  initialDevotions, initialPodcasts, initialSessions,
+  initialPrayers, initialResources, initialSecurity
 } from './data/sampleData';
 import { Header, ActiveTab } from './components/Header';
 import { DashboardView } from './views/DashboardView';
@@ -27,11 +28,51 @@ import { VideoPlayerModal } from './components/VideoPlayerModal';
 import { SpiritualAssistantModal } from './components/SpiritualAssistantModal';
 import { LiveSessionCallModal } from './components/LiveSessionCallModal';
 
+import { useAuth } from './auth/AuthContext';
+import { AuthScreen } from './auth/AuthScreen';
+import { CallbackScreen } from './auth/CallbackScreen';
+import { apiUserToProfile } from './auth/adapt';
+
+const FullScreenLoader: React.FC = () => (
+  <div className="min-h-screen bg-stone-50 flex items-center justify-center text-stone-400">
+    <Loader2 className="w-6 h-6 animate-spin text-amber-700" />
+  </div>
+);
+
 export const App: React.FC = () => {
-  // State
+  const auth = useAuth();
+
+  // Lightweight routing: the Google redirect returns to /auth/callback.
+  if (typeof window !== 'undefined' && window.location.pathname.startsWith('/auth/callback')) {
+    return <CallbackScreen />;
+  }
+  if (!auth.ready) return <FullScreenLoader />;
+  if (auth.status !== 'authenticated' || !auth.user) return <AuthScreen />;
+
+  return <AuthedApp />;
+};
+
+const AuthedApp: React.FC = () => {
+  const auth = useAuth();
+  const apiUser = auth.user!;
+
+  // Bridge the authenticated identity onto the legacy UserProfile shape the
+  // views still expect. Domain data (mentors, goals, devotions, …) is still
+  // seeded from sample data here and moves onto the API in phase P4.
+  const bridgedUser = useMemo(
+    () =>
+      apiUserToProfile(
+        apiUser,
+        apiUser.role === 'mentor' ? initialMentors[0] : initialMentees[0],
+      ),
+    [apiUser],
+  );
+
   const [mentors, setMentors] = useState<UserProfile[]>(initialMentors);
   const [mentees, setMentees] = useState<UserProfile[]>(initialMentees);
-  const [currentUser, setCurrentUser] = useState<UserProfile>(initialMentees[0]); // Default to Joshua Miller (Mentee)
+  const [currentUserOverride, setCurrentUserOverride] = useState<UserProfile | null>(null);
+  const currentUser = currentUserOverride ?? bridgedUser;
+
   const [activeTab, setActiveTab] = useState<ActiveTab>('DASHBOARD');
 
   const [devotions, setDevotions] = useState<DailyDevotion[]>(initialDevotions);
@@ -55,10 +96,6 @@ export const App: React.FC = () => {
   const [isSpiritualAssistantOpen, setIsSpiritualAssistantOpen] = useState(false);
 
   // Handlers
-  const handleSwitchUser = (user: UserProfile) => {
-    setCurrentUser(user);
-  };
-
   const handleAddNewUser = (newUser: UserProfile) => {
     if (newUser.role === 'MENTOR_ELDER') {
       setMentors([newUser, ...mentors]);
@@ -74,7 +111,7 @@ export const App: React.FC = () => {
       setMentees(mentees.map(m => m.id === updatedUser.id ? updatedUser : m));
     }
     if (currentUser.id === updatedUser.id) {
-      setCurrentUser(updatedUser);
+      setCurrentUserOverride(updatedUser);
     }
   };
 
@@ -98,11 +135,10 @@ export const App: React.FC = () => {
   };
 
   const handlePairMentorAndMentee = (
-    mentor: UserProfile, 
-    mentee: UserProfile, 
+    mentor: UserProfile,
+    mentee: UserProfile,
     application: any
   ) => {
-    // 1. Update Mentee
     const updatedMentee: UserProfile = {
       ...mentee,
       assignedMentorId: mentor.id,
@@ -110,13 +146,11 @@ export const App: React.FC = () => {
       pairedDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
     };
 
-    // 2. Update Mentor mentee count
     const updatedMentor: UserProfile = {
       ...mentor,
       activeMenteesCount: (mentor.activeMenteesCount || 0) + 1
     };
 
-    // 3. Create First Discipleship Check-in Session
     const newSession: DiscipleshipSession = {
       id: `session_${Date.now()}`,
       menteeId: mentee.id,
@@ -142,7 +176,7 @@ export const App: React.FC = () => {
     setMentors(mentors.map(m => m.id === mentor.id ? updatedMentor : m));
     setMentees(mentees.map(m => m.id === mentee.id ? updatedMentee : m));
     if (currentUser.id === mentee.id) {
-      setCurrentUser(updatedMentee);
+      setCurrentUserOverride(updatedMentee);
     }
   };
 
@@ -212,18 +246,15 @@ export const App: React.FC = () => {
     return pin === security.pinCode || pin === '1234';
   };
 
-  const allUsers = [...mentees, ...mentors];
-
   return (
     <div className="min-h-screen bg-stone-50 text-stone-900 flex flex-col justify-between font-sans">
-      
+
       {/* Top Global Header */}
       <Header
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         currentUser={currentUser}
-        availableUsers={allUsers}
-        onSwitchUser={handleSwitchUser}
+        onLogout={auth.logout}
         onOpenAssistant={() => setIsSpiritualAssistantOpen(true)}
       />
 
@@ -299,7 +330,7 @@ export const App: React.FC = () => {
             mentors={mentors}
             mentees={mentees}
             currentUser={currentUser}
-            onSelectMentorForBooking={(m) => {
+            onSelectMentorForBooking={() => {
               setActiveTab('SESSIONS');
             }}
             onUpdateUserProfile={handleUpdateUserProfile}
