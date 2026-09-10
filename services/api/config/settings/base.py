@@ -46,6 +46,14 @@ INSTALLED_APPS = [
     "apps.common",
     "apps.accounts",
     "apps.audit",
+    "apps.mentorship",
+    "apps.goals",
+    "apps.devotions",
+    "apps.media",
+    "apps.sessions",
+    "apps.prayers",
+    "apps.resources",
+    "apps.integrations",
 ]
 
 MIDDLEWARE = [

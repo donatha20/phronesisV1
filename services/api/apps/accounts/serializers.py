@@ -11,6 +11,8 @@ from .models import User, UserRole
 class UserSerializer(serializers.ModelSerializer):
     """Shape returned by ``GET /api/auth/user/`` and embedded elsewhere."""
 
+    display_name = serializers.CharField(read_only=True)
+
     class Meta:
         model = User
         fields = (
@@ -18,14 +20,43 @@ class UserSerializer(serializers.ModelSerializer):
             "email",
             "first_name",
             "last_name",
+            "display_name",
             "role",
             "avatar_initial",
-            "bio",
-            "focus_spheres",
             "profile_completed",
+            "title",
+            "age",
+            "location",
+            "bio",
+            "full_biography",
+            "ministry_journey",
+            "mentorship_philosophy",
+            "availability_schedule",
+            "church_community",
+            "years_in_faith",
+            "favorite_scripture",
+            "spiritual_gifts",
+            "primary_spheres",
+            "focus_spheres",
+            "badges",
+            "phone",
+            "whatsapp_number",
+            "telegram_username",
+            "is_verified_elder",
+            "active_mentees_count",
+            "discipleship_hours",
             "date_joined",
         )
-        read_only_fields = ("id", "email", "role", "avatar_initial", "date_joined")
+        read_only_fields = (
+            "id",
+            "email",
+            "role",
+            "avatar_initial",
+            "is_verified_elder",
+            "active_mentees_count",
+            "discipleship_hours",
+            "date_joined",
+        )
 
 
 class RegisterSerializer(BaseRegisterSerializer):

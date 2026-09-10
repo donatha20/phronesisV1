@@ -11,7 +11,7 @@ extend-exclude = ["migrations"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "DJ", "C4"]
-ignore = ["E501"]
+ignore = ["E501", "C408"]  # C408: `defaults=dict(...)` is a readable Django idiom
 
 [tool.mypy]
 python_version = "3.13"
