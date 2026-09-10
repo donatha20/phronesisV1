@@ -12,12 +12,16 @@ from django.http import HttpRequest, HttpResponseRedirect
 from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework import mixins, viewsets
+from rest_framework.filters import SearchFilter
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.audit.models import AuditAction
 from apps.audit.services import record
 
 from .google_oauth import GoogleOAuthError, build_authorization_url, exchange_code_for_identity
+from .serializers import UserSerializer
 
 User = get_user_model()
 
@@ -47,6 +51,18 @@ class AuditedLogoutView(LogoutView):
         if user is not None:
             record(AuditAction.LOGOUT, actor=user)
         return response
+
+
+class MentorDirectoryViewSet(
+    mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet
+):
+    """Read-only directory of mentors (`GET /api/mentors/`)."""
+
+    serializer_class = UserSerializer
+    queryset = User.objects.filter(role="mentor", is_active=True).order_by("first_name", "last_name")
+    filter_backends = [DjangoFilterBackend, SearchFilter]
+    filterset_fields = ["is_verified_elder"]
+    search_fields = ["first_name", "last_name", "title", "church_community"]
 
 
 @require_GET

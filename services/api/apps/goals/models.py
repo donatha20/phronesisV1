@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from django.conf import settings
 from django.db import models
+from django.db.models import Count, Q
 from django.utils.translation import gettext_lazy as _
 
 from apps.common.choices import LifeSphere
@@ -43,11 +44,14 @@ class Goal(BaseModel):
         return self.title
 
     def recompute_progress(self) -> int:
-        milestones = list(self.milestones.all())
-        if not milestones:
+        # aggregate() always hits the DB, so this is correct even when
+        # ``milestones`` was prefetched with stale state.
+        stats = self.milestones.aggregate(
+            total=Count("id"), done=Count("id", filter=Q(is_completed=True))
+        )
+        if not stats["total"]:
             return self.progress_percent
-        done = sum(1 for m in milestones if m.is_completed)
-        self.progress_percent = round(done / len(milestones) * 100)
+        self.progress_percent = round(stats["done"] / stats["total"] * 100)
         return self.progress_percent
 
 

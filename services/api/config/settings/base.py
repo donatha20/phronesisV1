@@ -260,6 +260,9 @@ FEATURES = {
     "ASSISTANT": env.bool("ASSISTANT_FEATURE_ENABLED", default=False),
 }
 
+# Minutes a prayer-vault password re-auth stays valid (private-vault bodies).
+PRAYER_VAULT_UNLOCK_MINUTES = env.int("PRAYER_VAULT_UNLOCK_MINUTES", default=10)
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
