@@ -23,7 +23,7 @@ class DevotionCommentSerializer(serializers.ModelSerializer):
         return obj.author.display_name if obj.author else "Former member"
 
     def get_author_role(self, obj: DevotionComment) -> str:
-        return obj.author.role if obj.author else ""
+        return obj.author.role.slug if obj.author else ""
 
 
 class DevotionSerializer(serializers.ModelSerializer):
@@ -48,7 +48,7 @@ class DevotionSerializer(serializers.ModelSerializer):
         return obj.author.display_name if obj.author else "Former member"
 
     def get_author_role(self, obj: Devotion) -> str:
-        return obj.author.role if obj.author else ""
+        return obj.author.role.slug if obj.author else ""
 
     def create(self, validated_data: dict) -> Devotion:
         user = self.context["request"].user

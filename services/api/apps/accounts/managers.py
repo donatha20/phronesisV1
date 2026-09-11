@@ -15,6 +15,10 @@ class UserManager(DjangoUserManager):
         if not email:
             raise ValueError("An email address is required.")
         email = self.normalize_email(email)
+        if "role" in extra_fields:
+            from .models import Role
+
+            extra_fields["role"] = Role.resolve(extra_fields["role"])
         user = self.model(email=email, **extra_fields)
         user.password = make_password(password)
         user.save(using=self._db)

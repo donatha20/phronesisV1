@@ -3,9 +3,9 @@ import {
   BookOpen, Video, Target, Lock, Radio, Sparkles, 
   ArrowRight, Flame, CheckCircle2, Clock, Calendar, Heart, Shield
 } from 'lucide-react';
-import { 
-  UserProfile, DailyDevotion, GoalItem, 
-  DiscipleshipSession, PodcastEpisode, PrayerRequest 
+import {
+  UserProfile, DailyDevotion, GoalItem,
+  DiscipleshipSession, PodcastEpisode, PrayerRequest, LifeSphere
 } from '../types';
 import { ActiveTab } from '../components/Header';
 import { ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
@@ -17,11 +17,20 @@ interface DashboardViewProps {
   sessions: DiscipleshipSession[];
   podcasts: PodcastEpisode[];
   prayers: PrayerRequest[];
+  pairedMentor: { id: string; name: string } | null;
   onNavigate: (tab: ActiveTab) => void;
   onOpenSessionCall: (session: DiscipleshipSession) => void;
   onOpenVideoModal: (episode: PodcastEpisode) => void;
   onPlayAudioDevotion: (devotion: DailyDevotion) => void;
 }
+
+const SPHERE_RADAR_LABELS: Record<LifeSphere, string> = {
+  PERSONAL_GROWTH: 'Personal Growth',
+  ACADEMIA_CAREER: 'Career & Tech',
+  RELATIONSHIPS: 'Relationships',
+  FINANCES: 'Finances',
+  PHYSICAL_WELLBEING: 'Wellbeing',
+};
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
   currentUser,
@@ -30,6 +39,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   sessions,
   podcasts,
   prayers,
+  pairedMentor,
   onNavigate,
   onOpenSessionCall,
   onOpenVideoModal,
@@ -40,14 +50,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const activePrayers = prayers.filter(p => !p.isAnswered);
   const answeredPrayers = prayers.filter(p => p.isAnswered);
 
-  // 5 Spheres Radar Data
-  const sphereRadarData = [
-    { sphere: 'Personal Growth', score: 85 },
-    { sphere: 'Career & Tech', score: 70 },
-    { sphere: 'Relationships', score: 80 },
-    { sphere: 'Finances', score: 90 },
-    { sphere: 'Wellbeing', score: 75 }
-  ];
+  // 5 Spheres Radar Data — average progress of the user's own goals per sphere
+  // (0 for spheres with no goals yet, rather than a fabricated baseline).
+  const sphereRadarData = (Object.keys(SPHERE_RADAR_LABELS) as LifeSphere[]).map((sphere) => {
+    const sphereGoals = goals.filter((g) => g.sphere === sphere);
+    const score = sphereGoals.length
+      ? Math.round(sphereGoals.reduce((sum, g) => sum + g.progressPercent, 0) / sphereGoals.length)
+      : 0;
+    return { sphere: SPHERE_RADAR_LABELS[sphere], score };
+  });
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -323,23 +334,33 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
           {/* Discipleship Mentor Card */}
           <div className="bg-stone-900 rounded-3xl p-6 border border-stone-800 text-stone-100 space-y-3 shadow-sm">
-            <div className="text-xs font-bold uppercase tracking-wider text-amber-400">Assigned Senior Mentor</div>
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-amber-600/30 border border-amber-500/50 flex items-center justify-center font-bold text-lg text-amber-300 shrink-0">
-                T
-              </div>
-              <div>
-                <h4 className="text-sm font-bold text-white">Elder Thomas Bradley</h4>
-                <p className="text-xs text-stone-400">48 Yrs in Faith • Austin, TX</p>
-              </div>
+            <div className="text-xs font-bold uppercase tracking-wider text-amber-400">
+              {currentUser.role === 'MENTOR_ELDER' ? 'Your Discipleship Pairing' : 'Assigned Senior Mentor'}
             </div>
-            <p className="text-xs text-stone-300 italic">
-              "Joshua, keep abiding in the vine. True strength is learning to lean wholly on Christ."
-            </p>
+            {pairedMentor ? (
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-amber-600/30 border border-amber-500/50 flex items-center justify-center font-bold text-lg text-amber-300 shrink-0">
+                  {pairedMentor.name.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-white">{pairedMentor.name}</h4>
+                  <p className="text-xs text-stone-400">
+                    {currentUser.role === 'MENTOR_ELDER' ? 'Paired mentee' : 'Paired mentor'}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-stone-400">
+                {currentUser.role === 'MENTOR_ELDER'
+                  ? 'You have no active mentee pairing yet.'
+                  : 'You have not been paired with a mentor yet — browse the directory to apply.'}
+              </p>
+            )}
             <div className="pt-2 flex gap-2">
               <button
                 onClick={() => onNavigate('SESSIONS')}
-                className="flex-1 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold transition text-center"
+                disabled={!pairedMentor}
+                className="flex-1 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold transition text-center"
               >
                 Schedule Session
               </button>

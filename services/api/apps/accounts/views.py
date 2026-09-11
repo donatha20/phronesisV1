@@ -9,21 +9,32 @@ from dj_rest_auth.views import LoginView, LogoutView, PasswordChangeView
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import update_last_login
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import HttpRequest, HttpResponseRedirect
 from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import generics, mixins, viewsets
+from rest_framework import generics, mixins, status, viewsets
+from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.filters import SearchFilter
+from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.audit.models import AuditAction
 from apps.audit.services import record
+from apps.common.permissions import IsAdmin
+from apps.common.viewsets import AuditedModelViewSet
 
 from .google_oauth import GoogleOAuthError, build_authorization_url, exchange_code_for_identity
-from .models import SecuritySettings
-from .serializers import SecuritySettingsSerializer, UserSerializer
+from .models import Role, SecuritySettings, UserRole
+from .serializers import (
+    AdminUserSerializer,
+    RoleSerializer,
+    SecuritySettingsSerializer,
+    UserSerializer,
+)
 
 User = get_user_model()
 
@@ -108,10 +119,73 @@ class MentorDirectoryViewSet(
     """Read-only directory of mentors (`GET /api/mentors/`)."""
 
     serializer_class = UserSerializer
-    queryset = User.objects.filter(role="mentor", is_active=True).order_by("first_name", "last_name")
+    queryset = User.objects.filter(role__base_kind=UserRole.MENTOR, is_active=True).order_by(
+        "first_name", "last_name"
+    )
     filter_backends = [DjangoFilterBackend, SearchFilter]
     filterset_fields = ["is_verified_elder"]
     search_fields = ["first_name", "last_name", "title", "church_community"]
+
+
+class RoleViewSet(AuditedModelViewSet):
+    """Admin-only role management (`/api/admin/roles/`).
+
+    The three seeded system roles (mentee/mentor/admin) cannot be deleted or
+    have their ``slug``/``base_kind`` changed (enforced in
+    ``RoleSerializer.validate`` and ``perform_destroy`` below) — every other
+    app's RBAC depends on those three ``base_kind`` values always existing.
+    """
+
+    queryset = Role.objects.all()
+    serializer_class = RoleSerializer
+    permission_classes = [IsAdmin]
+    filter_backends = [DjangoFilterBackend, SearchFilter]
+    filterset_fields = ["base_kind", "is_system"]
+    search_fields = ["name", "slug"]
+
+    def perform_destroy(self, instance: Role) -> None:  # type: ignore[no-untyped-def]
+        if instance.is_system:
+            raise PermissionDenied("System roles cannot be deleted.")
+        super().perform_destroy(instance)
+
+
+class AdminUserViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
+    """Admin-only user directory + role assignment.
+
+    `GET /api/admin/users/` to find a user, `PATCH /api/admin/users/{id}/role/`
+    to assign one — the only in-app way to change a user's role (previously
+    only possible, unaudited, via the Django admin panel).
+    """
+
+    queryset = User.objects.select_related("role").order_by("email")
+    serializer_class = AdminUserSerializer
+    permission_classes = [IsAdmin]
+    filter_backends = [DjangoFilterBackend, SearchFilter]
+    filterset_fields = ["role__slug", "is_active"]
+    search_fields = ["email", "first_name", "last_name"]
+
+    @action(detail=True, methods=["patch"], url_path="role")
+    def role(self, request, pk=None):  # type: ignore[no-untyped-def]
+        user = self.get_object()
+        role_id = request.data.get("role_id")
+        if not role_id:
+            raise ValidationError({"role_id": "This field is required."})
+        try:
+            new_role = Role.objects.get(pk=role_id)
+        except (Role.DoesNotExist, ValueError, TypeError, DjangoValidationError):
+            raise ValidationError({"role_id": "No role matches this id."}) from None
+
+        old_role = user.role
+        if old_role.pk != new_role.pk:
+            user.role = new_role
+            user.save(update_fields=["role"])
+            record(
+                AuditAction.ROLE_CHANGE,
+                actor=request.user,
+                target=user,
+                metadata={"old_role": old_role.slug, "new_role": new_role.slug},
+            )
+        return Response(AdminUserSerializer(user).data, status=status.HTTP_200_OK)
 
 
 @require_GET
@@ -184,7 +258,7 @@ def google_callback_view(request: HttpRequest):
         defaults={
             "first_name": identity.given_name,
             "last_name": identity.family_name,
-            "role": "mentee",
+            "role": Role.resolve(UserRole.MENTEE),
         },
     )
     if not user.is_active:

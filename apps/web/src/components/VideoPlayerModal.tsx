@@ -37,29 +37,49 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
         </div>
 
         {/* Video Canvas Container */}
-        <div className="relative aspect-video bg-black flex items-center justify-center overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-t from-stone-950/90 via-stone-900/40 to-transparent flex flex-col justify-end p-8">
-            <div className="space-y-3">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-600/90 text-white text-xs font-bold uppercase tracking-wider">
-                <Sparkles className="w-3.5 h-3.5" /> High Definition Video Masterclass
+        {episode.mediaUrl ? (
+          <div className="relative aspect-video bg-black">
+            <video
+              key={episode.mediaUrl}
+              src={episode.mediaUrl}
+              controls
+              autoPlay
+              className="w-full h-full"
+            />
+          </div>
+        ) : episode.videoEmbedUrl ? (
+          <div className="relative aspect-video bg-black">
+            <iframe
+              key={episode.videoEmbedUrl}
+              src={episode.videoEmbedUrl}
+              title={episode.title}
+              className="w-full h-full"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          </div>
+        ) : (
+          <div className="relative aspect-video bg-black flex items-center justify-center overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-t from-stone-950/90 via-stone-900/40 to-transparent flex flex-col justify-end p-8">
+              <div className="space-y-3">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-stone-700/90 text-white text-xs font-bold uppercase tracking-wider">
+                  <Sparkles className="w-3.5 h-3.5" /> No Video File Uploaded
+                </div>
+                <h2 className="text-2xl sm:text-3xl font-bold font-serif-display text-white">
+                  {episode.title}
+                </h2>
+                <p className="text-sm text-stone-300">
+                  Featuring: <strong className="text-amber-300">{episode.speaker}</strong> ({episode.speakerRole})
+                </p>
               </div>
-              <h2 className="text-2xl sm:text-3xl font-bold font-serif-display text-white">
-                {episode.title}
-              </h2>
-              <p className="text-sm text-stone-300">
-                Featuring: <strong className="text-amber-300">{episode.speaker}</strong> ({episode.speakerRole})
+            </div>
+            <div className="text-center p-6 z-10">
+              <p className="text-xs text-stone-400">
+                This episode was published without a video file or embed link.
               </p>
             </div>
           </div>
-          <div className="text-center p-6 z-10">
-            <div className="w-16 h-16 mx-auto rounded-full bg-amber-500/90 hover:bg-amber-400 text-stone-950 flex items-center justify-center shadow-lg cursor-pointer transition transform hover:scale-105">
-              <svg className="w-8 h-8 fill-current ml-1" viewBox="0 0 24 24">
-                <path d="M8 5v14l11-7z" />
-              </svg>
-            </div>
-            <p className="text-xs text-stone-300 mt-3">Interactive Studio Stream • Synchronized Scriptures Loaded</p>
-          </div>
-        </div>
+        )}
 
         {/* Details & Scriptures */}
         <div className="p-6 space-y-6">

@@ -7,11 +7,57 @@ from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 from apps.common.choices import LifeSphere, UserRole
-from apps.common.models import TimeStampedModel
+from apps.common.models import BaseModel, TimeStampedModel
 
 from .managers import UserManager
 
-__all__ = ["User", "SecuritySettings", "UserRole", "LifeSphere"]
+__all__ = ["User", "Role", "SecuritySettings", "UserRole", "LifeSphere"]
+
+# Fixed (not random) pk for the seeded "mentee" system role, so `User.role`'s
+# default can be this literal constant instead of a callable that queries the
+# DB — a DB-querying default gets evaluated eagerly by `Model.__init__` (e.g.
+# Django's own `check_user_model` system check does `cls()`), which runs
+# before migrations exist on a fresh database and crashes with "no such
+# table". A stable literal has no such chicken-and-egg problem.
+MENTEE_ROLE_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
+
+
+class Role(BaseModel):
+    """An assignable role.
+
+    The three ``is_system`` rows (mentee/mentor/admin) are seeded by migration
+    and can never be deleted or renamed — every existing permission check in
+    every app (``apps.common.permissions.is_admin``/``is_mentor``) keys off
+    ``base_kind``, not the row itself, so those checks work unchanged no
+    matter how many custom roles exist.
+
+    An admin creating a new role (e.g. "Youth Pastor") picks a ``base_kind``
+    so it plugs into that already-audited RBAC, while still being a distinct,
+    admin-managed identity with its own name and capability list.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    slug = models.SlugField(max_length=100, unique=True)
+    base_kind = models.CharField(max_length=16, choices=UserRole.choices)
+    capabilities = models.JSONField(default=list, blank=True)
+    is_system = models.BooleanField(default=False)
+    description = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ("name",)
+
+    def __str__(self) -> str:
+        return self.name
+
+    @classmethod
+    def resolve(cls, value: Role | str) -> Role:
+        """Accepts a ``Role`` instance or a slug string (incl. the legacy
+        ``UserRole`` literals "mentee"/"mentor"/"admin") and returns a ``Role``.
+        Lets every call site that used to assign a plain role string keep
+        doing so without knowing about the FK underneath."""
+        if isinstance(value, cls):
+            return value
+        return cls.objects.get(slug=value)
 
 
 class User(AbstractUser):
@@ -24,7 +70,9 @@ class User(AbstractUser):
     email = models.EmailField(_("email address"), unique=True)
 
     # identity / role
-    role = models.CharField(max_length=16, choices=UserRole.choices, default=UserRole.MENTEE)
+    role = models.ForeignKey(
+        Role, on_delete=models.PROTECT, related_name="users", default=MENTEE_ROLE_ID
+    )
     avatar_initial = models.CharField(max_length=2, blank=True)
     profile_completed = models.BooleanField(default=False)
 

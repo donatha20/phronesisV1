@@ -4,7 +4,7 @@ import { apiUserToProfile } from '../auth/adapt';
 import type { ApiUser } from '../auth/types';
 import type {
   GoalDTO, DevotionDTO, DevotionCommentDTO, PrayerDTO, SessionDTO, MentorshipDTO,
-  EpisodeDTO, ResourceDTO, Paginated,
+  EpisodeDTO, ResourceDTO, Paginated, RoleDTO, AdminUserDTO,
 } from './dto';
 import {
   toGoal, toDevotion, toDevotionComment, toPrayer, toSession, toEpisode, toResource,
@@ -30,6 +30,8 @@ export const qk = {
   resources: ['resources'] as const,
   mentors: ['mentors'] as const,
   security: ['security'] as const,
+  adminRoles: ['admin-roles'] as const,
+  adminUsers: ['admin-users'] as const,
 };
 
 /** The current user's single active mentorship, if any (works for either role). */
@@ -480,4 +482,80 @@ export function useSecurityMutations() {
   });
 
   return { updateTwoFactor, changePassword };
+}
+
+// ---- Admin: roles & users (phase R2/R3) --------------------------------
+export function useRoles() {
+  return useQuery({
+    queryKey: qk.adminRoles,
+    queryFn: () => list<RoleDTO>('/api/admin/roles/'),
+  });
+}
+
+export interface CreateRoleInput {
+  name: string;
+  slug: string;
+  baseKind: 'mentee' | 'mentor' | 'admin';
+  description?: string;
+  capabilities?: string[];
+}
+
+export function useRoleMutations() {
+  const qc = useQueryClient();
+  const invalidate = () => qc.invalidateQueries({ queryKey: qk.adminRoles });
+
+  const create = useMutation({
+    mutationFn: (input: CreateRoleInput) =>
+      apiFetch<RoleDTO>('/api/admin/roles/', {
+        method: 'POST',
+        json: {
+          name: input.name,
+          slug: input.slug,
+          base_kind: input.baseKind,
+          description: input.description ?? '',
+          capabilities: input.capabilities ?? [],
+        },
+      }),
+    onSuccess: invalidate,
+  });
+
+  const update = useMutation({
+    mutationFn: ({ id, ...input }: { id: string } & Partial<Omit<CreateRoleInput, 'baseKind' | 'slug'>>) =>
+      apiFetch<RoleDTO>(`/api/admin/roles/${id}/`, {
+        method: 'PATCH',
+        json: {
+          ...(input.name !== undefined && { name: input.name }),
+          ...(input.description !== undefined && { description: input.description }),
+          ...(input.capabilities !== undefined && { capabilities: input.capabilities }),
+        },
+      }),
+    onSuccess: invalidate,
+  });
+
+  const remove = useMutation({
+    mutationFn: (id: string) => apiFetch(`/api/admin/roles/${id}/`, { method: 'DELETE' }),
+    onSuccess: invalidate,
+  });
+
+  return { create, update, remove };
+}
+
+export function useAdminUsers(search?: string) {
+  return useQuery({
+    queryKey: [...qk.adminUsers, search ?? ''] as const,
+    queryFn: () =>
+      list<AdminUserDTO>(`/api/admin/users/${search ? `?search=${encodeURIComponent(search)}` : ''}`),
+  });
+}
+
+export function useAssignUserRole() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, roleId }: { userId: string; roleId: string }) =>
+      apiFetch<AdminUserDTO>(`/api/admin/users/${userId}/role/`, {
+        method: 'PATCH',
+        json: { role_id: roleId },
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.adminUsers }),
+  });
 }

@@ -14,7 +14,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils import timezone
 
-from apps.accounts.models import SecuritySettings, User
+from apps.accounts.models import Role, SecuritySettings, User
 from apps.common.choices import LifeSphere, UserRole
 from apps.devotions.models import Devotion
 from apps.goals.models import Goal, GoalStatus, Milestone
@@ -140,7 +140,7 @@ class Command(BaseCommand):
     def _user(self, email: str, first: str, last: str, role: str, **extra: Any) -> User:
         user, created = User.objects.get_or_create(
             email=email,
-            defaults=dict(first_name=first, last_name=last, role=role,
+            defaults=dict(first_name=first, last_name=last, role=Role.resolve(role),
                           profile_completed=True, **extra),
         )
         if created:

@@ -16,7 +16,7 @@ def test_healthz() -> None:
 def test_user_model_is_email_first() -> None:
     User = get_user_model()
     user = User.objects.create_user(email="grace@example.com", password="a-strong-pass-1")
-    assert user.role == "mentee"
+    assert user.role.slug == "mentee"
     assert user.avatar_initial == "G"
     assert user.get_username() == "grace@example.com"
 
@@ -46,6 +46,7 @@ def test_registration_then_me_flow() -> None:
     assert me.status_code == 200
     assert me.json()["email"] == "newbeliever@example.com"
     assert me.json()["role"] == "mentee"
+    assert me.json()["role_base_kind"] == "mentee"
 
 
 def test_login_writes_audit_row() -> None:

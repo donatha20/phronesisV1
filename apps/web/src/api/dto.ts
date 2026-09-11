@@ -174,3 +174,27 @@ export interface SessionDTO {
   created_at: string;
   updated_at: string;
 }
+
+// ---- Admin: roles & users --------------------------------------------
+export interface RoleDTO {
+  id: string;
+  name: string;
+  slug: string;
+  base_kind: string;
+  capabilities: string[];
+  is_system: boolean;
+  description: string;
+  created_at: string;
+}
+
+export interface AdminUserDTO {
+  id: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  display_name: string;
+  role: RoleDTO;
+  is_active: boolean;
+  is_staff: boolean;
+  date_joined: string;
+}

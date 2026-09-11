@@ -1,7 +1,7 @@
 import type { UserProfile, UserRole, LifeSphere } from '../types';
 import type { ApiUser } from './types';
 
-const ROLE_MAP: Record<ApiUser['role'], UserRole> = {
+const ROLE_MAP: Record<ApiUser['role_base_kind'], UserRole> = {
   mentee: 'YOUNG_BELIEVER_MENTEE',
   mentor: 'MENTOR_ELDER',
   admin: 'ADMIN',
@@ -43,7 +43,7 @@ export function apiUserToProfile(api: ApiUser, template: UserProfile = blankProf
     ...template,
     id: api.id,
     name: api.display_name || api.email,
-    role: ROLE_MAP[api.role],
+    role: ROLE_MAP[api.role_base_kind],
     title: api.title || template.title,
     bio: api.bio || template.bio,
     fullBiography: api.full_biography || template.fullBiography,

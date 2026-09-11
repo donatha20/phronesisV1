@@ -2,7 +2,7 @@ import React from 'react';
 import {
   Sparkles, Shield, Compass, BookOpen, Radio, Target,
   Video, Lock, Users, FolderOpen, ChevronDown, Flame,
-  HardDrive, CalendarDays, LogOut
+  HardDrive, CalendarDays, LogOut, UserCog
 } from 'lucide-react';
 import { UserProfile } from '../types';
 
@@ -17,7 +17,8 @@ export type ActiveTab =
   | 'RESOURCES'
   | 'GOOGLE_DRIVE'
   | 'GOOGLE_CALENDAR'
-  | 'SECURITY';
+  | 'SECURITY'
+  | 'ADMIN';
 
 interface HeaderProps {
   activeTab: ActiveTab;
@@ -53,7 +54,10 @@ export const Header: React.FC<HeaderProps> = ({
     { id: 'MENTORS', label: 'Mentors Directory', icon: Users },
     { id: 'RESOURCES', label: 'Library', icon: FolderOpen },
     { id: 'GOOGLE_DRIVE', label: 'Google Drive', icon: HardDrive },
-    { id: 'SECURITY', label: 'Security & Keys', icon: Shield }
+    { id: 'SECURITY', label: 'Security & Keys', icon: Shield },
+    ...(currentUser.role === 'ADMIN'
+      ? [{ id: 'ADMIN' as const, label: 'Admin', icon: UserCog }]
+      : []),
   ];
 
   return (

@@ -48,7 +48,7 @@ def test_callback_creates_user_sets_jwt_and_audits(monkeypatch: pytest.MonkeyPat
     assert "phronesis-refresh" in resp.cookies and resp.cookies["phronesis-refresh"].value
 
     user = get_user_model().objects.get(email="newgoogle@example.com")
-    assert user.role == "mentee"
+    assert user.role.slug == "mentee"
     assert not user.has_usable_password()
     assert AuditLog.objects.filter(action="auth.register", actor=user).exists()
     assert AuditLog.objects.filter(action="auth.login", actor=user).exists()

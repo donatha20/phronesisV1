@@ -14,6 +14,7 @@ import { ResourceLibraryView } from './views/ResourceLibraryView';
 import { GoogleDriveView } from './views/GoogleDriveView';
 import { GoogleCalendarMeetView } from './views/GoogleCalendarMeetView';
 import { SecuritySettingsView } from './views/SecuritySettingsView';
+import { AdminRolesView } from './views/AdminRolesView';
 
 import { AudioVoicePlayer } from './components/AudioVoicePlayer';
 import { VideoPlayerModal } from './components/VideoPlayerModal';
@@ -100,7 +101,7 @@ const AuthedApp: React.FC = () => {
   const sessions = sessionsQuery.data ?? [];
   const myMentorshipQuery = useMyMentorship();
   const pairedMentor = myMentorshipQuery.data
-    ? apiUser.role === 'mentor'
+    ? apiUser.role_base_kind === 'mentor'
       ? { id: myMentorshipQuery.data.mentee, name: myMentorshipQuery.data.mentee_name }
       : { id: myMentorshipQuery.data.mentor, name: myMentorshipQuery.data.mentor_name }
     : null;
@@ -133,7 +134,7 @@ const AuthedApp: React.FC = () => {
       title: pod.title,
       speaker: pod.speaker,
       duration: pod.durationSeconds,
-      url: 'https://actions.google.com/sounds/v1/ambiences/gentle_stream.ogg'
+      url: pod.mediaUrl,
     });
   };
 
@@ -159,6 +160,7 @@ const AuthedApp: React.FC = () => {
             sessions={sessions}
             podcasts={podcasts}
             prayers={prayers}
+            pairedMentor={pairedMentor}
             onNavigate={(tab) => setActiveTab(tab)}
             onOpenSessionCall={(s) => setActiveLiveCallSession(s)}
             onOpenVideoModal={(p) => setActiveVideoModal(p)}
@@ -220,8 +222,8 @@ const AuthedApp: React.FC = () => {
             pairedMentor={pairedMentor}
             onOpenSessionCall={(s) => setActiveLiveCallSession(s)}
             onScheduleSession={(input) => sessionMutations.create.mutate({
-              menteeId: apiUser.role === 'mentor' ? input.mentorId : apiUser.id,
-              mentorId: apiUser.role === 'mentor' ? apiUser.id : input.mentorId,
+              menteeId: apiUser.role_base_kind === 'mentor' ? input.mentorId : apiUser.id,
+              mentorId: apiUser.role_base_kind === 'mentor' ? apiUser.id : input.mentorId,
               scheduledAt: input.scheduledAt,
               durationMinutes: 45,
               sphereFocus: input.sphereFocus,
@@ -342,6 +344,10 @@ const AuthedApp: React.FC = () => {
               await securityMutations.changePassword.mutateAsync({ oldPassword, newPassword });
             }}
           />
+        )}
+
+        {activeTab === 'ADMIN' && apiUser.role_base_kind === 'admin' && (
+          <AdminRolesView />
         )}
       </main>
 

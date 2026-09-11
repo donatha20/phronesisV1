@@ -36,6 +36,7 @@ export const PodcastMediaHubView: React.FC<PodcastMediaHubViewProps> = ({
   const [sphere, setSphere] = useState<LifeSphere>('PERSONAL_GROWTH');
   const [description, setDescription] = useState('');
   const [scripturesText, setScripturesText] = useState('Proverbs 3:5-6, Romans 12:1-2');
+  const [takeawaysText, setTakeawaysText] = useState('');
   const [mediaFile, setMediaFile] = useState<File | null>(null);
 
   const filtered = podcasts.filter(p => {
@@ -69,11 +70,7 @@ export const PodcastMediaHubView: React.FC<PodcastMediaHubViewProps> = ({
       sphere,
       description: description.trim(),
       keyScriptures: scripturesText.split(',').map(s => s.trim()).filter(Boolean),
-      keyTakeaways: [
-        'Practical biblical application in current cultural moment',
-        'Generational wisdom passed down from church elders',
-        'Action steps to implement in daily prayer walk'
-      ],
+      keyTakeaways: takeawaysText.split('\n').map(s => s.trim()).filter(Boolean),
       viewsCount: 1,
       likesCount: 1,
       isLiked: true,
@@ -87,6 +84,7 @@ export const PodcastMediaHubView: React.FC<PodcastMediaHubViewProps> = ({
     // Reset
     setTitle('');
     setDescription('');
+    setTakeawaysText('');
     setMediaFile(null);
   };
 
@@ -357,6 +355,17 @@ export const PodcastMediaHubView: React.FC<PodcastMediaHubViewProps> = ({
                   value={scripturesText}
                   onChange={(e) => setScripturesText(e.target.value)}
                   className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3.5 py-2 text-xs text-stone-900 focus:outline-none focus:border-amber-600"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-stone-700 uppercase tracking-wider">Key Takeaways (one per line)</label>
+                <textarea
+                  rows={3}
+                  placeholder={'e.g.\nPractical steps for walking in daily obedience\nHow to discern God\'s voice in decision-making'}
+                  value={takeawaysText}
+                  onChange={(e) => setTakeawaysText(e.target.value)}
+                  className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3 text-xs text-stone-900 focus:outline-none focus:border-amber-600"
                 />
               </div>
 

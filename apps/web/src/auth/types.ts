@@ -5,7 +5,14 @@ export interface ApiUser {
   first_name: string;
   last_name: string;
   display_name: string;
-  role: 'mentee' | 'mentor' | 'admin';
+  /** The assigned role's slug — may be a custom admin-created role (e.g.
+   * "youth-pastor"), not just mentee/mentor/admin. Use `role_base_kind` for
+   * anything permission- or UI-mode-related. */
+  role: string;
+  /** Always one of mentee/mentor/admin, regardless of how many custom roles
+   * exist — this is what every RBAC/UI-mode decision should key off. */
+  role_base_kind: 'mentee' | 'mentor' | 'admin';
+  role_name: string;
   avatar_initial: string;
   profile_completed: boolean;
   title: string;

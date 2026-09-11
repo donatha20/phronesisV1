@@ -3,7 +3,15 @@ from __future__ import annotations
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 
-from .models import SecuritySettings, User
+from .models import Role, SecuritySettings, User
+
+
+@admin.register(Role)
+class RoleAdmin(admin.ModelAdmin):
+    list_display = ("name", "slug", "base_kind", "is_system", "created_at")
+    list_filter = ("base_kind", "is_system")
+    search_fields = ("name", "slug")
+    prepopulated_fields = {"slug": ("name",)}
 
 
 @admin.register(User)

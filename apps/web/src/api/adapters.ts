@@ -117,6 +117,7 @@ export const toEpisode = (e: EpisodeDTO): PodcastEpisode => ({
   isLiked: e.is_liked_by_me,
   isSaved: e.is_saved_by_me,
   videoEmbedUrl: e.video_embed_url || undefined,
+  mediaUrl: e.media_file || undefined,
   coverImageTheme: e.cover_image_theme || 'from-amber-800 to-stone-950',
 });
 

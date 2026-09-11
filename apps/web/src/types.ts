@@ -160,6 +160,8 @@ export interface PodcastEpisode {
   isLiked: boolean;
   isSaved: boolean;
   videoEmbedUrl?: string;
+  /** The actual uploaded audio/video file's URL (S3-backed, phase P6), if any. */
+  mediaUrl?: string;
   coverImageTheme: string;
 }
 
