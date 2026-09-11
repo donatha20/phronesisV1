@@ -1,165 +1,191 @@
 import React, { useState } from 'react';
-import { 
-  Shield, KeyRound, Smartphone, Lock, CheckCircle2, 
-  RefreshCw, AlertCircle, Sparkles, Database, Fingerprint 
+import {
+  Shield, Smartphone, CheckCircle2, Loader2, Clock, KeyRound
 } from 'lucide-react';
-import { SecuritySettings, UserProfile } from '../types';
+import { UserProfile } from '../types';
+import { apiErrorMessage } from '../lib/api';
 
 interface SecuritySettingsViewProps {
-  security: SecuritySettings;
   currentUser: UserProfile;
-  onUpdateSecurity: (newSettings: SecuritySettings) => void;
+  twoFactorEnabled: boolean;
+  lastVaultUnlockAt: string | null;
+  lastPasswordChangeAt: string | null;
+  onToggleTwoFactor: (enabled: boolean) => void;
+  onChangePassword: (oldPassword: string, newPassword: string) => Promise<void>;
 }
 
 export const SecuritySettingsView: React.FC<SecuritySettingsViewProps> = ({
-  security,
   currentUser,
-  onUpdateSecurity
+  twoFactorEnabled,
+  lastVaultUnlockAt,
+  lastPasswordChangeAt,
+  onToggleTwoFactor,
+  onChangePassword
 }) => {
-  const [pin, setPin] = useState(security.pinCode);
-  const [biometrics, setBiometrics] = useState(security.biometricsEnabled);
-  const [twoFa, setTwoFa] = useState(security.twoFactorEnabled);
+  const [oldPassword, setOldPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
   const [isSavedNotice, setIsSavedNotice] = useState(false);
+  const [busy, setBusy] = useState(false);
 
-  const handleSaveSettings = (e: React.FormEvent) => {
+  const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    onUpdateSecurity({
-      ...security,
-      pinCode: pin,
-      biometricsEnabled: biometrics,
-      twoFactorEnabled: twoFa
-    });
-    setIsSavedNotice(true);
-    setTimeout(() => setIsSavedNotice(false), 3000);
+    setError(null);
+    if (newPassword !== confirmPassword) {
+      setError('New passwords do not match.');
+      return;
+    }
+    setBusy(true);
+    try {
+      await onChangePassword(oldPassword, newPassword);
+      setOldPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setIsSavedNotice(true);
+      setTimeout(() => setIsSavedNotice(false), 3000);
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
   };
+
+  const formatDate = (iso: string | null) =>
+    iso ? new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : 'Never';
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto animate-fade-in">
-      
+
       {/* Header */}
       <div className="bg-white p-6 rounded-3xl border border-stone-200 shadow-sm space-y-1">
         <div className="flex items-center gap-2">
           <span className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-100 text-amber-900">
-            Cryptographic Vault Security
+            Account Security
           </span>
-          <span className="text-xs text-stone-500">Zero-Knowledge Encrypted Architecture</span>
+          <span className="text-xs text-stone-500">{currentUser.email}</span>
         </div>
         <h1 className="text-2xl font-bold font-serif-display text-stone-900">
-          Security Settings & Private Key Management
+          Security Settings
         </h1>
         <p className="text-xs text-stone-600">
-          All intimate prayer entries, mentor session notes, and confessions are encrypted locally using AES-256-GCM.
+          Private prayer entries are protected by access control and audit logging, not client-side
+          encryption — viewing one always requires re-entering your password.
         </p>
       </div>
 
       {isSavedNotice && (
         <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-bold flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-          <span>Security settings updated and cryptographic key re-derived!</span>
+          <span>Password updated.</span>
         </div>
       )}
 
-      {/* Main Settings Card */}
+      {/* Change password */}
       <div className="bg-white rounded-3xl p-6 sm:p-8 border border-stone-200 shadow-sm space-y-6">
-        <form onSubmit={handleSaveSettings} className="space-y-6">
-          
-          {/* PIN Setting */}
-          <div className="space-y-2 pb-6 border-b border-stone-100">
-            <div className="flex items-center justify-between">
-              <div>
-                <label className="text-sm font-bold text-stone-900 flex items-center gap-2">
-                  <KeyRound className="w-4 h-4 text-amber-600" /> Prayer Vault PIN Code
-                </label>
-                <p className="text-xs text-stone-500">
-                  4-digit PIN required to unlock and view encrypted prayer journals.
-                </p>
-              </div>
+        <div className="flex items-center gap-2 text-stone-900 font-bold text-sm">
+          <KeyRound className="w-4 h-4 text-amber-600" /> Change Password
+        </div>
+
+        {error && (
+          <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 whitespace-pre-line">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleChangePassword} className="space-y-4">
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-stone-700 uppercase tracking-wider">Current password</label>
+            <input
+              type="password"
+              required
+              autoComplete="current-password"
+              value={oldPassword}
+              onChange={(e) => setOldPassword(e.target.value)}
+              className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3.5 py-2 text-xs text-stone-900 focus:outline-none focus:border-amber-600"
+            />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-stone-700 uppercase tracking-wider">New password</label>
               <input
                 type="password"
-                maxLength={4}
-                value={pin}
-                onChange={(e) => setPin(e.target.value)}
-                className="w-28 text-center font-mono text-base font-bold bg-stone-50 border border-stone-200 rounded-xl py-2 text-stone-900 focus:outline-none focus:border-amber-600"
+                required
+                minLength={10}
+                autoComplete="new-password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3.5 py-2 text-xs text-stone-900 focus:outline-none focus:border-amber-600"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-stone-700 uppercase tracking-wider">Confirm new password</label>
+              <input
+                type="password"
+                required
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3.5 py-2 text-xs text-stone-900 focus:outline-none focus:border-amber-600"
               />
             </div>
           </div>
-
-          {/* Biometrics Toggle */}
-          <div className="flex items-center justify-between pb-6 border-b border-stone-100">
-            <div>
-              <div className="text-sm font-bold text-stone-900 flex items-center gap-2">
-                <Fingerprint className="w-4 h-4 text-amber-600" /> Biometric Authentication (Touch ID / Face ID)
-              </div>
-              <p className="text-xs text-stone-500">
-                Unlock your spiritual journal with device hardware biometrics.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setBiometrics(!biometrics)}
-              className={`w-12 h-6 rounded-full transition-colors relative ${
-                biometrics ? 'bg-amber-600' : 'bg-stone-200'
-              }`}
-            >
-              <div
-                className={`w-5 h-5 rounded-full bg-white shadow-sm transition-transform absolute top-0.5 ${
-                  biometrics ? 'left-6' : 'left-0.5'
-                }`}
-              />
-            </button>
-          </div>
-
-          {/* 2FA Toggle */}
-          <div className="flex items-center justify-between pb-6 border-b border-stone-100">
-            <div>
-              <div className="text-sm font-bold text-stone-900 flex items-center gap-2">
-                <Smartphone className="w-4 h-4 text-amber-600" /> Two-Factor Mentorship Verification (2FA)
-              </div>
-              <p className="text-xs text-stone-500">
-                Requires device confirmation before joining live mentoring call sessions.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setTwoFa(!twoFa)}
-              className={`w-12 h-6 rounded-full transition-colors relative ${
-                twoFa ? 'bg-amber-600' : 'bg-stone-200'
-              }`}
-            >
-              <div
-                className={`w-5 h-5 rounded-full bg-white shadow-sm transition-transform absolute top-0.5 ${
-                  twoFa ? 'left-6' : 'left-0.5'
-                }`}
-              />
-            </button>
-          </div>
-
-          {/* Key details */}
-          <div className="bg-stone-900 text-stone-100 rounded-2xl p-5 space-y-3">
-            <div className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
-              <Shield className="w-4 h-4" /> Cryptographic Details
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-              <div>
-                <span className="text-stone-400 block text-[10px]">Algorithm:</span>
-                <span className="font-mono text-stone-200">{security.encryptionAlgorithm}</span>
-              </div>
-              <div>
-                <span className="text-stone-400 block text-[10px]">Last Cloud Encrypted Backup:</span>
-                <span className="font-mono text-stone-200">{security.lastBackupDate}</span>
-              </div>
-            </div>
-          </div>
-
           <div className="flex justify-end">
             <button
               type="submit"
-              className="px-6 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold transition shadow-sm"
+              disabled={busy}
+              className="px-6 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 disabled:opacity-60 text-white text-xs font-bold transition shadow-sm flex items-center gap-2"
             >
-              Save Security Configuration
+              {busy && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              Update Password
             </button>
           </div>
         </form>
+      </div>
+
+      {/* Two-factor preference */}
+      <div className="bg-white rounded-3xl p-6 sm:p-8 border border-stone-200 shadow-sm space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm font-bold text-stone-900 flex items-center gap-2">
+              <Smartphone className="w-4 h-4 text-amber-600" /> Two-Factor Preference
+            </div>
+            <p className="text-xs text-stone-500 max-w-md">
+              Stored as a preference on your account. Enforcement (e.g. an email or authenticator
+              challenge at login) is not yet implemented.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onToggleTwoFactor(!twoFactorEnabled)}
+            className={`w-12 h-6 rounded-full transition-colors relative shrink-0 ${
+              twoFactorEnabled ? 'bg-amber-600' : 'bg-stone-200'
+            }`}
+          >
+            <div
+              className={`w-5 h-5 rounded-full bg-white shadow-sm transition-transform absolute top-0.5 ${
+                twoFactorEnabled ? 'left-6' : 'left-0.5'
+              }`}
+            />
+          </button>
+        </div>
+      </div>
+
+      {/* Account activity */}
+      <div className="bg-stone-900 text-stone-100 rounded-2xl p-5 space-y-3">
+        <div className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+          <Shield className="w-4 h-4" /> Account Activity
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+          <div>
+            <span className="text-stone-400 block text-[10px] flex items-center gap-1"><Clock className="w-3 h-3" /> Last prayer vault unlock:</span>
+            <span className="font-mono text-stone-200">{formatDate(lastVaultUnlockAt)}</span>
+          </div>
+          <div>
+            <span className="text-stone-400 block text-[10px] flex items-center gap-1"><Clock className="w-3 h-3" /> Last password change:</span>
+            <span className="font-mono text-stone-200">{formatDate(lastPasswordChangeAt)}</span>
+          </div>
+        </div>
       </div>
 
     </div>

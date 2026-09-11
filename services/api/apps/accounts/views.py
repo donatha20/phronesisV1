@@ -5,7 +5,7 @@ from urllib.parse import urlencode
 
 from dj_rest_auth.jwt_auth import set_jwt_cookies
 from dj_rest_auth.registration.views import RegisterView
-from dj_rest_auth.views import LoginView, LogoutView
+from dj_rest_auth.views import LoginView, LogoutView, PasswordChangeView
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import update_last_login
@@ -14,7 +14,7 @@ from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import mixins, viewsets
+from rest_framework import generics, mixins, viewsets
 from rest_framework.filters import SearchFilter
 from rest_framework_simplejwt.tokens import RefreshToken
 
@@ -22,7 +22,8 @@ from apps.audit.models import AuditAction
 from apps.audit.services import record
 
 from .google_oauth import GoogleOAuthError, build_authorization_url, exchange_code_for_identity
-from .serializers import UserSerializer
+from .models import SecuritySettings
+from .serializers import SecuritySettingsSerializer, UserSerializer
 
 User = get_user_model()
 
@@ -75,6 +76,30 @@ class AuditedLogoutView(LogoutView):
         if user is not None:
             record(AuditAction.LOGOUT, actor=user)
         return response
+
+
+class AuditedPasswordChangeView(PasswordChangeView):
+    """Real password change (`POST /api/auth/password/change/`), audited and
+    kept in sync with SecuritySettings.last_password_change_at."""
+
+    def post(self, request, *args, **kwargs):  # type: ignore[no-untyped-def]
+        response = super().post(request, *args, **kwargs)
+        if response.status_code == 200 and request.user.is_authenticated:
+            ss, _ = SecuritySettings.objects.get_or_create(user=request.user)
+            ss.last_password_change_at = timezone.now()
+            ss.save(update_fields=["last_password_change_at", "updated_at"])
+            record(AuditAction.PASSWORD_CHANGE, actor=request.user)
+        return response
+
+
+class MySecuritySettingsView(generics.RetrieveUpdateAPIView):
+    """`GET/PATCH /api/auth/security/` — the current user's own settings."""
+
+    serializer_class = SecuritySettingsSerializer
+
+    def get_object(self):  # type: ignore[no-untyped-def]
+        obj, _ = SecuritySettings.objects.get_or_create(user=self.request.user)
+        return obj
 
 
 class MentorDirectoryViewSet(
@@ -181,7 +206,5 @@ def google_callback_view(request: HttpRequest):
     set_jwt_cookies(response, str(refresh.access_token), str(refresh))
     response.delete_cookie(_STATE_COOKIE, path=_STATE_COOKIE_PATH)
     # touch security settings row
-    from .models import SecuritySettings
-
     SecuritySettings.objects.get_or_create(user=user, defaults={"last_password_change_at": timezone.now()})
     return response

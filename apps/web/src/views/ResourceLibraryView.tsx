@@ -84,8 +84,10 @@ export const ResourceLibraryView: React.FC<ResourceLibraryViewProps> = ({
       syllabusChapters: chaptersList.length > 0 ? chaptersList : ['Module 1: Comprehensive Discipleship Overview']
     };
 
+    // The uploader is auto-enrolled server-side once the resource is created
+    // (see App.tsx's onAddNewResource) — the id here is client-local and not
+    // the real server id, so we don't call onEnrollResource with it.
     onAddNewResource(createdResource);
-    onEnrollResource(createdResource.id);
     setIsUploadModalOpen(false);
 
     // Reset fields

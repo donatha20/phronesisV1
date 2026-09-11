@@ -99,6 +99,8 @@ export interface ResourceItem {
   uploadedBy?: string;
   uploadDate?: string;
   keyScriptureAnchors?: string[];
+  /** Whether the current user is enrolled (API-backed resources only). */
+  isEnrolled?: boolean;
 }
 
 export type ResourceType = 'PDF_GUIDE' | 'STUDY_SERIES' | 'SERMON_TRANSCRIPT' | 'BOOK_RECOMMENDATION';

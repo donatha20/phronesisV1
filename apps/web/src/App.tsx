@@ -1,11 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import {
-  UserProfile, PodcastEpisode, ResourceItem, SecuritySettings
-} from './types';
-import {
-  initialMentors, initialMentees, initialPodcasts, initialResources, initialSecurity
-} from './data/sampleData';
+import { UserProfile, DiscipleshipSession, PodcastEpisode } from './types';
+import { initialMentees } from './data/sampleData';
 import { Header, ActiveTab } from './components/Header';
 import { DashboardView } from './views/DashboardView';
 import { DailyDevotionsView } from './views/DailyDevotionsView';
@@ -35,7 +31,12 @@ import {
   usePrayers, useVaultStatus, usePrayerMutations,
   useSessions, useSessionMutations,
   useMyMentorship,
+  useEpisodes, useEpisodeMutations,
+  useResources, useResourceMutations,
+  useMentorsDirectory, useMentorshipMutations, useUpdateMyProfile,
+  useMySecuritySettings, useSecurityMutations,
 } from './api/hooks';
+import { episodeToCreateInput, resourceToCreateInput } from './api/adapters';
 
 const FullScreenLoader: React.FC = () => (
   <div className="min-h-screen bg-stone-50 flex items-center justify-center text-stone-400">
@@ -62,23 +63,11 @@ const AuthedApp: React.FC = () => {
 
   // Bridge the authenticated identity onto the legacy UserProfile shape the
   // remaining (not-yet-migrated) views still expect.
-  const bridgedUser = useMemo(
-    () =>
-      apiUserToProfile(
-        apiUser,
-        apiUser.role === 'mentor' ? initialMentors[0] : initialMentees[0],
-      ),
-    [apiUser],
-  );
-
-  const [mentors, setMentors] = useState<UserProfile[]>(initialMentors);
-  const [mentees, setMentees] = useState<UserProfile[]>(initialMentees);
-  const [currentUserOverride, setCurrentUserOverride] = useState<UserProfile | null>(null);
-  const currentUser = currentUserOverride ?? bridgedUser;
+  const currentUser = useMemo(() => apiUserToProfile(apiUser), [apiUser]);
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('DASHBOARD');
 
-  // ---- API-backed domains (goals, devotions, prayers, sessions) ----------
+  // ---- API-backed domains --------------------------------------------
   const goalsQuery = useGoals();
   const goalMutations = useGoalMutations();
   const goals = goalsQuery.data ?? [];
@@ -105,79 +94,28 @@ const AuthedApp: React.FC = () => {
       : { id: myMentorshipQuery.data.mentor, name: myMentorshipQuery.data.mentor_name }
     : null;
 
-  // ---- Domains still seeded from sample data (migrate in a later pass) ---
-  const [podcasts, setPodcasts] = useState<PodcastEpisode[]>(initialPodcasts);
-  const [resources, setResources] = useState<ResourceItem[]>(initialResources);
-  const [security, setSecurity] = useState<SecuritySettings>(initialSecurity);
-  const [enrolledResourceIds, setEnrolledResourceIds] = useState<string[]>(['res_1', 'res_2']);
+  const episodesQuery = useEpisodes();
+  const episodeMutations = useEpisodeMutations();
+  const podcasts = episodesQuery.data ?? [];
+
+  const resourcesQuery = useResources();
+  const resourceMutations = useResourceMutations();
+  const resources = resourcesQuery.data ?? [];
+
+  const mentorsQuery = useMentorsDirectory();
+  const mentors = mentorsQuery.data ?? [];
+  const mentees = initialMentees; // no safe/authorized backend directory for mentees yet
+  const mentorshipMutations = useMentorshipMutations();
+  const updateMyProfile = useUpdateMyProfile();
+
+  const securityQuery = useMySecuritySettings();
+  const securityMutations = useSecurityMutations();
 
   // Modals & Floating Players
   const [activeAudio, setActiveAudio] = useState<{ title: string; speaker: string; duration: number; url?: string } | null>(null);
   const [activeVideoModal, setActiveVideoModal] = useState<PodcastEpisode | null>(null);
-  const [activeLiveCallSession, setActiveLiveCallSession] = useState<import('./types').DiscipleshipSession | null>(null);
+  const [activeLiveCallSession, setActiveLiveCallSession] = useState<DiscipleshipSession | null>(null);
   const [isSpiritualAssistantOpen, setIsSpiritualAssistantOpen] = useState(false);
-
-  // Handlers (sample-data domains) ------------------------------------
-  const handleAddNewUser = (newUser: UserProfile) => {
-    if (newUser.role === 'MENTOR_ELDER') {
-      setMentors([newUser, ...mentors]);
-    } else {
-      setMentees([newUser, ...mentees]);
-    }
-  };
-
-  const handleUpdateUserProfile = (updatedUser: UserProfile) => {
-    if (updatedUser.role === 'MENTOR_ELDER') {
-      setMentors(mentors.map(m => m.id === updatedUser.id ? updatedUser : m));
-    } else {
-      setMentees(mentees.map(m => m.id === updatedUser.id ? updatedUser : m));
-    }
-    if (currentUser.id === updatedUser.id) {
-      setCurrentUserOverride(updatedUser);
-    }
-  };
-
-  const handleAddNewResource = (newRes: ResourceItem) => {
-    setResources([newRes, ...resources]);
-  };
-
-  const handleEnrollResource = (resourceId: string) => {
-    if (!enrolledResourceIds.includes(resourceId)) {
-      setEnrolledResourceIds([...enrolledResourceIds, resourceId]);
-      setResources(prev => prev.map(r => {
-        if (r.id === resourceId) {
-          return { ...r, enrolledUsersCount: (r.enrolledUsersCount || 10) + 1 };
-        }
-        return r;
-      }));
-    }
-  };
-
-  const handlePairMentorAndMentee = (
-    mentor: UserProfile,
-    mentee: UserProfile,
-    application: any
-  ) => {
-    // Sample-data profile bookkeeping only. The real pairing (which also
-    // creates the first discipleship session) happens server-side via
-    // POST /api/mentorship-applications/{id}/accept/ — see apps/mentorship.
-    const updatedMentee: UserProfile = {
-      ...mentee,
-      assignedMentorId: mentor.id,
-      assignedMentorName: mentor.name,
-      pairedDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-    };
-    const updatedMentor: UserProfile = {
-      ...mentor,
-      activeMenteesCount: (mentor.activeMenteesCount || 0) + 1
-    };
-
-    setMentors(mentors.map(m => m.id === mentor.id ? updatedMentor : m));
-    setMentees(mentees.map(m => m.id === mentee.id ? updatedMentee : m));
-    if (currentUser.id === mentee.id) {
-      setCurrentUserOverride(updatedMentee);
-    }
-  };
 
   const handlePlayAudioPodcast = (pod: PodcastEpisode) => {
     setActiveAudio({
@@ -252,9 +190,15 @@ const AuthedApp: React.FC = () => {
             podcasts={podcasts}
             onOpenVideoModal={(p) => setActiveVideoModal(p)}
             onPlayAudioPodcast={handlePlayAudioPodcast}
-            onAddNewPodcast={(np) => setPodcasts([np, ...podcasts])}
-            onToggleSave={(id) => setPodcasts(podcasts.map(p => p.id === id ? { ...p, isSaved: !p.isSaved } : p))}
-            onToggleLike={(id) => setPodcasts(podcasts.map(p => p.id === id ? { ...p, isLiked: !p.isLiked, likesCount: p.isLiked ? p.likesCount - 1 : p.likesCount + 1 } : p))}
+            onAddNewPodcast={(np) => episodeMutations.create.mutate(episodeToCreateInput(np))}
+            onToggleSave={(id) => {
+              const p = podcasts.find(x => x.id === id);
+              episodeMutations.toggleSave.mutate({ id, saved: p?.isSaved ?? false });
+            }}
+            onToggleLike={(id) => {
+              const p = podcasts.find(x => x.id === id);
+              episodeMutations.toggleLike.mutate({ id, liked: p?.isLiked ?? false });
+            }}
           />
         )}
 
@@ -308,9 +252,30 @@ const AuthedApp: React.FC = () => {
             onSelectMentorForBooking={() => {
               setActiveTab('SESSIONS');
             }}
-            onUpdateUserProfile={handleUpdateUserProfile}
-            onAddNewUser={handleAddNewUser}
-            onPairMentorAndMentee={handlePairMentorAndMentee}
+            onEditMyBio={(input) => {
+              updateMyProfile.mutate(
+                {
+                  title: input.title,
+                  location: input.location,
+                  years_in_faith: input.yearsInFaith,
+                  church_community: input.churchCommunity,
+                  bio: input.bio,
+                  full_biography: input.fullBiography,
+                  ministry_journey: input.ministryJourney,
+                  mentorship_philosophy: input.mentorshipPhilosophy,
+                  availability_schedule: input.availabilitySchedule,
+                  favorite_scripture: input.favoriteScripture,
+                },
+                { onSuccess: () => auth.refresh() },
+              );
+            }}
+            onApplyToMentor={(input) => mentorshipMutations.apply.mutate({
+              mentorId: input.mentorId,
+              sphere: input.sphere,
+              introduction: input.introduction,
+              growthDesire: input.growthDesire,
+              meetingFrequency: input.meetingFrequency,
+            })}
           />
         )}
 
@@ -318,10 +283,15 @@ const AuthedApp: React.FC = () => {
           <ResourceLibraryView
             resources={resources}
             currentUser={currentUser}
-            enrolledResourceIds={enrolledResourceIds}
-            onToggleBookmark={(id) => setResources(resources.map(r => r.id === id ? { ...r, isBookmarked: !r.isBookmarked } : r))}
-            onAddNewResource={handleAddNewResource}
-            onEnrollResource={handleEnrollResource}
+            enrolledResourceIds={resources.filter(r => r.isEnrolled).map(r => r.id)}
+            onToggleBookmark={(id) => {
+              const r = resources.find(x => x.id === id);
+              resourceMutations.toggleBookmark.mutate({ id, bookmarked: r?.isBookmarked ?? false });
+            }}
+            onAddNewResource={(res) => resourceMutations.create.mutate(resourceToCreateInput(res), {
+              onSuccess: (dto) => resourceMutations.enroll.mutate(dto.id),
+            })}
+            onEnrollResource={(id) => resourceMutations.enroll.mutate(id)}
           />
         )}
 
@@ -332,7 +302,7 @@ const AuthedApp: React.FC = () => {
             goals={goals}
             prayers={prayers}
             onImportResourceToLibrary={(res) => {
-              handleAddNewResource(res);
+              resourceMutations.create.mutate(resourceToCreateInput(res));
               setActiveTab('RESOURCES');
             }}
           />
@@ -351,9 +321,14 @@ const AuthedApp: React.FC = () => {
 
         {activeTab === 'SECURITY' && (
           <SecuritySettingsView
-            security={security}
             currentUser={currentUser}
-            onUpdateSecurity={(ns) => setSecurity(ns)}
+            twoFactorEnabled={securityQuery.data?.two_factor_enabled ?? false}
+            lastVaultUnlockAt={securityQuery.data?.last_vault_unlock_at ?? null}
+            lastPasswordChangeAt={securityQuery.data?.last_password_change_at ?? null}
+            onToggleTwoFactor={(enabled) => securityMutations.updateTwoFactor.mutate(enabled)}
+            onChangePassword={async (oldPassword, newPassword) => {
+              await securityMutations.changePassword.mutateAsync({ oldPassword, newPassword });
+            }}
           />
         )}
       </main>
@@ -374,8 +349,14 @@ const AuthedApp: React.FC = () => {
       <VideoPlayerModal
         episode={activeVideoModal}
         onClose={() => setActiveVideoModal(null)}
-        onToggleLike={(id) => setPodcasts(podcasts.map(p => p.id === id ? { ...p, isLiked: !p.isLiked } : p))}
-        onToggleSave={(id) => setPodcasts(podcasts.map(p => p.id === id ? { ...p, isSaved: !p.isSaved } : p))}
+        onToggleLike={(id) => {
+          const p = podcasts.find(x => x.id === id);
+          episodeMutations.toggleLike.mutate({ id, liked: p?.isLiked ?? false });
+        }}
+        onToggleSave={(id) => {
+          const p = podcasts.find(x => x.id === id);
+          episodeMutations.toggleSave.mutate({ id, saved: p?.isSaved ?? false });
+        }}
       />
 
       <LiveSessionCallModal

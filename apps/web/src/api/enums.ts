@@ -43,6 +43,28 @@ export const SESSION_PLATFORM_TO_UI: Record<string, SessionPlatform> = {
 };
 export const SESSION_PLATFORM_TO_API: Record<string, string> = invert(SESSION_PLATFORM_TO_UI);
 
+export const MEDIA_TYPE_TO_UI: Record<string, 'AUDIO' | 'VIDEO'> = {
+  audio: 'AUDIO',
+  video: 'VIDEO',
+};
+export const MEDIA_TYPE_TO_API: Record<string, string> = invert(MEDIA_TYPE_TO_UI);
+
+export const RESOURCE_TYPE_TO_UI: Record<string, string> = {
+  pdf_guide: 'PDF_GUIDE',
+  study_series: 'STUDY_SERIES',
+  sermon_transcript: 'SERMON_TRANSCRIPT',
+  book_recommendation: 'BOOK_RECOMMENDATION',
+};
+export const RESOURCE_TYPE_TO_API: Record<string, string> = invert(RESOURCE_TYPE_TO_UI);
+
+export const ACCESS_TIER_TO_UI: Record<string, string> = {
+  open_public: 'OPEN_PUBLIC',
+  registered_disciples: 'REGISTERED_DISCIPLES',
+  elders_only: 'ELDERS_ONLY',
+  enrolled_cohort: 'ENROLLED_COHORT',
+};
+export const ACCESS_TIER_TO_API: Record<string, string> = invert(ACCESS_TIER_TO_UI);
+
 export const SESSION_STATUS_TO_UI: Record<string, SessionStatus> = {
   scheduled: 'SCHEDULED',
   in_progress: 'IN_PROGRESS',

@@ -93,6 +93,54 @@ export interface PrayerDTO {
   updated_at: string;
 }
 
+export interface EpisodeDTO {
+  id: string;
+  title: string;
+  series: string;
+  speaker: string;
+  speaker_role: string;
+  media_type: string;
+  media_file: string | null;
+  video_embed_url: string;
+  cover_image_theme: string;
+  duration_seconds: number;
+  release_date: string | null;
+  sphere: string;
+  description: string;
+  key_scriptures: string[];
+  key_takeaways: string[];
+  views_count: number;
+  uploaded_by: string | null;
+  uploaded_by_name: string;
+  likes_count: number;
+  is_liked_by_me: boolean;
+  is_saved_by_me: boolean;
+  created_at: string;
+}
+
+export interface ResourceDTO {
+  id: string;
+  title: string;
+  author: string;
+  type: string;
+  sphere: string;
+  description: string;
+  read_time: string;
+  file: string | null;
+  external_url: string;
+  file_size_bytes: number | null;
+  rating: string;
+  access_tier: string;
+  syllabus_chapters: string[];
+  key_scripture_anchors: string[];
+  uploaded_by: string | null;
+  uploaded_by_name: string;
+  is_bookmarked_by_me: boolean;
+  is_enrolled: boolean;
+  enrolled_users_count: number;
+  created_at: string;
+}
+
 export interface MentorshipDTO {
   id: string;
   mentee: string;

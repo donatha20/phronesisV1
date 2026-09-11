@@ -1,13 +1,16 @@
 import type {
   GoalItem, MilestoneItem, DailyDevotion, DevotionComment,
-  PrayerRequest, DiscipleshipSession,
+  PrayerRequest, DiscipleshipSession, PodcastEpisode, ResourceItem,
 } from '../types';
 import type {
   GoalDTO, MilestoneDTO, DevotionDTO, DevotionCommentDTO, PrayerDTO, SessionDTO,
+  EpisodeDTO, ResourceDTO,
 } from './dto';
 import {
-  SPHERE_TO_UI, ROLE_TO_UI, GOAL_STATUS_TO_UI,
+  SPHERE_TO_UI, SPHERE_TO_API, ROLE_TO_UI, GOAL_STATUS_TO_UI,
   PRAYER_PRIVACY_TO_UI, SESSION_PLATFORM_TO_UI, SESSION_STATUS_TO_UI,
+  MEDIA_TYPE_TO_UI, MEDIA_TYPE_TO_API, RESOURCE_TYPE_TO_UI, RESOURCE_TYPE_TO_API,
+  ACCESS_TIER_TO_UI, ACCESS_TIER_TO_API,
 } from './enums';
 
 const initialOf = (name: string) => (name.trim()[0] || '?').toUpperCase();
@@ -93,6 +96,117 @@ export const toPrayer = (p: PrayerDTO): PrayerRequest => ({
   cipherHint: p.is_body_hidden ? 'Locked — unlock the vault to view' : '',
   tags: p.tags,
 });
+
+// ---- Media / episodes --------------------------------------------------
+export const toEpisode = (e: EpisodeDTO): PodcastEpisode => ({
+  id: e.id,
+  title: e.title,
+  series: e.series,
+  speaker: e.speaker,
+  speakerRole: e.speaker_role,
+  mediaType: MEDIA_TYPE_TO_UI[e.media_type] ?? 'AUDIO',
+  durationString: formatDuration(e.duration_seconds),
+  durationSeconds: e.duration_seconds,
+  releaseDate: e.release_date ?? '',
+  sphere: SPHERE_TO_UI[e.sphere] ?? 'PERSONAL_GROWTH',
+  description: e.description,
+  keyScriptures: e.key_scriptures,
+  keyTakeaways: e.key_takeaways,
+  viewsCount: e.views_count,
+  likesCount: e.likes_count,
+  isLiked: e.is_liked_by_me,
+  isSaved: e.is_saved_by_me,
+  videoEmbedUrl: e.video_embed_url || undefined,
+  coverImageTheme: e.cover_image_theme || 'from-amber-800 to-stone-950',
+});
+
+function formatDuration(totalSeconds: number): string {
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+export interface CreateEpisodeInput {
+  title: string;
+  series: string;
+  speaker: string;
+  speakerRole: string;
+  mediaType: string;
+  durationSeconds: number;
+  sphere: string;
+  description: string;
+  keyScriptures: string[];
+  keyTakeaways: string[];
+  videoEmbedUrl?: string;
+  coverImageTheme?: string;
+}
+
+/** Reverse-adapt the legacy PodcastEpisode object the view builds locally
+ * into an API create payload (id/counts/like-state are server-generated). */
+export function episodeToCreateInput(ep: PodcastEpisode): CreateEpisodeInput {
+  return {
+    title: ep.title,
+    series: ep.series,
+    speaker: ep.speaker,
+    speakerRole: ep.speakerRole,
+    mediaType: ep.mediaType,
+    durationSeconds: ep.durationSeconds,
+    sphere: ep.sphere,
+    description: ep.description,
+    keyScriptures: ep.keyScriptures,
+    keyTakeaways: ep.keyTakeaways,
+    videoEmbedUrl: ep.videoEmbedUrl,
+    coverImageTheme: ep.coverImageTheme,
+  };
+}
+
+// ---- Resources -----------------------------------------------------
+export const toResource = (r: ResourceDTO): ResourceItem => ({
+  id: r.id,
+  title: r.title,
+  author: r.author,
+  type: RESOURCE_TYPE_TO_UI[r.type] as ResourceItem['type'] ?? 'PDF_GUIDE',
+  sphere: SPHERE_TO_UI[r.sphere] ?? 'PERSONAL_GROWTH',
+  description: r.description,
+  readTime: r.read_time,
+  downloadUrl: r.file ?? r.external_url ?? undefined,
+  isBookmarked: r.is_bookmarked_by_me,
+  isEnrolled: r.is_enrolled,
+  rating: Number(r.rating) || 0,
+  accessTier: ACCESS_TIER_TO_UI[r.access_tier] as ResourceItem['accessTier'] ?? 'OPEN_PUBLIC',
+  syllabusChapters: r.syllabus_chapters,
+  fileSize: r.file_size_bytes ? `${(r.file_size_bytes / 1_000_000).toFixed(1)} MB` : undefined,
+  enrolledUsersCount: r.enrolled_users_count,
+  uploadedBy: r.uploaded_by_name || undefined,
+  uploadDate: r.created_at,
+  keyScriptureAnchors: r.key_scripture_anchors,
+});
+
+export interface CreateResourceInput {
+  title: string;
+  author: string;
+  type: string;
+  sphere: string;
+  description: string;
+  readTime: string;
+  accessTier: string;
+  syllabusChapters: string[];
+  keyScriptureAnchors: string[];
+}
+
+export function resourceToCreateInput(res: ResourceItem): CreateResourceInput {
+  return {
+    title: res.title,
+    author: res.author,
+    type: res.type,
+    sphere: res.sphere,
+    description: res.description,
+    readTime: res.readTime,
+    accessTier: res.accessTier ?? 'OPEN_PUBLIC',
+    syllabusChapters: res.syllabusChapters ?? [],
+    keyScriptureAnchors: res.keyScriptureAnchors ?? [],
+  };
+}
 
 // ---- Sessions --------------------------------------------------------
 export const toSession = (s: SessionDTO): DiscipleshipSession => ({

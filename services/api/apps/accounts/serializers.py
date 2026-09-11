@@ -5,7 +5,7 @@ from typing import Any
 from dj_rest_auth.registration.serializers import RegisterSerializer as BaseRegisterSerializer
 from rest_framework import serializers
 
-from .models import User, UserRole
+from .models import SecuritySettings, User, UserRole
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -57,6 +57,19 @@ class UserSerializer(serializers.ModelSerializer):
             "discipleship_hours",
             "date_joined",
         )
+
+
+class SecuritySettingsSerializer(serializers.ModelSerializer):
+    """The current user's own security preferences.
+
+    There is no PIN/biometric vault mechanism (see PrayerRequest privacy model) —
+    only a real, storable preference flag plus informational timestamps.
+    """
+
+    class Meta:
+        model = SecuritySettings
+        fields = ("two_factor_enabled", "last_vault_unlock_at", "last_password_change_at")
+        read_only_fields = ("last_vault_unlock_at", "last_password_change_at")
 
 
 class RegisterSerializer(BaseRegisterSerializer):

@@ -19,12 +19,26 @@ function mapSpheres(values: string[]): LifeSphere[] {
   return values.map((v) => SPHERE_MAP[v]).filter(Boolean) as LifeSphere[];
 }
 
+/** A neutral, empty UserProfile — used as the `template` for arbitrary API
+ * users (e.g. the mentor directory) that don't have a hand-authored sample
+ * profile to borrow display defaults from. */
+export function blankProfileTemplate(): UserProfile {
+  return {
+    id: '', name: '', role: 'YOUNG_BELIEVER_MENTEE', title: '', age: 0, location: '', bio: '',
+    fullBiography: '', ministryJourney: '', mentorshipPhilosophy: '', availabilitySchedule: '',
+    spiritualGifts: [], primarySpheres: [], churchCommunity: '', yearsInFaith: 0,
+    email: '', phone: '', whatsappNumber: '', telegramUsername: '', isVerifiedElder: false,
+    activeMenteesCount: 0, discipleshipHours: 0, avatarInitial: '', favoriteScripture: '',
+    badges: [],
+  };
+}
+
 /**
- * Bridge the authenticated API user onto the legacy `UserProfile` shape the
- * views still expect. `template` supplies defaults for fields the API does not
- * yet serve; those are removed in phase P4 when the views move onto the API.
+ * Bridge an API user onto the legacy `UserProfile` shape the views still
+ * expect. `template` supplies defaults for fields the API does not yet serve
+ * (or display fallbacks for the authenticated user's own sample-data look).
  */
-export function apiUserToProfile(api: ApiUser, template: UserProfile): UserProfile {
+export function apiUserToProfile(api: ApiUser, template: UserProfile = blankProfileTemplate()): UserProfile {
   return {
     ...template,
     id: api.id,

@@ -1,20 +1,38 @@
 import React, { useState } from 'react';
-import { 
-  Users, ShieldCheck, Sparkles, MapPin, BookOpen, 
-  Clock, Award, MessageSquare, Video, CheckCircle2, Search, Filter,
-  UserPlus, Edit3, Heart, ChevronRight, X, Calendar, Check, Send, 
-  HelpCircle, Star, Phone, Mail, FileText
+import {
+  Users, ShieldCheck, Video, CheckCircle2, Search,
+  Edit3, Heart, X, Phone, Mail, FileText, Clock
 } from 'lucide-react';
-import { UserProfile, LifeSphere, DiscipleshipSession, MentorshipApplication } from '../types';
+import { UserProfile, LifeSphere } from '../types';
+
+export interface ApplyToMentorInput {
+  mentorId: string;
+  sphere: string;
+  introduction: string;
+  growthDesire: string;
+  meetingFrequency: string;
+}
+
+export interface EditMyBioInput {
+  title: string;
+  location: string;
+  yearsInFaith: number;
+  churchCommunity: string;
+  bio: string;
+  fullBiography: string;
+  ministryJourney: string;
+  mentorshipPhilosophy: string;
+  availabilitySchedule: string;
+  favoriteScripture: string;
+}
 
 interface MentorMatchingViewProps {
   mentors: UserProfile[];
   mentees: UserProfile[];
   currentUser: UserProfile;
   onSelectMentorForBooking: (mentor: UserProfile) => void;
-  onUpdateUserProfile: (updatedUser: UserProfile) => void;
-  onAddNewUser: (newUser: UserProfile) => void;
-  onPairMentorAndMentee: (mentor: UserProfile, mentee: UserProfile, app: MentorshipApplication) => void;
+  onEditMyBio: (input: EditMyBioInput) => void;
+  onApplyToMentor: (input: ApplyToMentorInput) => void;
 }
 
 export const MentorMatchingView: React.FC<MentorMatchingViewProps> = ({
@@ -22,46 +40,31 @@ export const MentorMatchingView: React.FC<MentorMatchingViewProps> = ({
   mentees,
   currentUser,
   onSelectMentorForBooking,
-  onUpdateUserProfile,
-  onAddNewUser,
-  onPairMentorAndMentee
+  onEditMyBio,
+  onApplyToMentor
 }) => {
   const [activeTab, setActiveTab] = useState<'MENTORS' | 'MENTEES'>('MENTORS');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGift, setSelectedGift] = useState<string>('ALL');
-  const [selectedSphereFilter, setSelectedSphereFilter] = useState<string>('ALL');
+  const [selectedSphereFilter] = useState<string>('ALL');
 
   // Modals
   const [selectedMentorForBio, setSelectedMentorForBio] = useState<UserProfile | null>(null);
-  const [isJoinMentorModalOpen, setIsJoinMentorModalOpen] = useState(false);
-  const [isJoinMenteeModalOpen, setIsJoinMenteeModalOpen] = useState(false);
+  const [isEditBioModalOpen, setIsEditBioModalOpen] = useState(false);
   const [isPairingRequestModalOpen, setIsPairingRequestModalOpen] = useState<UserProfile | null>(null);
   const [pairingSuccessToast, setPairingSuccessToast] = useState<string | null>(null);
 
-  // Mentor Registration / Edit Biography Form State
-  const [mentorName, setMentorName] = useState('');
-  const [mentorTitle, setMentorTitle] = useState('');
-  const [mentorAge, setMentorAge] = useState(55);
-  const [mentorLocation, setMentorLocation] = useState('');
-  const [mentorYearsInFaith, setMentorYearsInFaith] = useState(25);
-  const [mentorChurch, setMentorChurch] = useState('');
-  const [mentorShortBio, setMentorShortBio] = useState('');
-  const [mentorFullBio, setMentorFullBio] = useState('');
-  const [mentorMinistryJourney, setMentorMinistryJourney] = useState('');
-  const [mentorPhilosophy, setMentorPhilosophy] = useState('');
-  const [mentorAvailability, setMentorAvailability] = useState('');
-  const [mentorScripture, setMentorScripture] = useState('Proverbs 3:5-6');
-  const [mentorGifts, setMentorGifts] = useState<string[]>(['Wisdom & Counsel', 'Pastoral Shepherding']);
-  const [mentorSpheres, setMentorSpheres] = useState<LifeSphere[]>(['PERSONAL_GROWTH', 'ACADEMIA_CAREER']);
-
-  // Mentee Registration Form State
-  const [menteeName, setMenteeName] = useState('');
-  const [menteeTitle, setMenteeTitle] = useState('');
-  const [menteeAge, setMenteeAge] = useState(22);
-  const [menteeLocation, setMenteeLocation] = useState('');
-  const [menteeChurch, setMenteeChurch] = useState('');
-  const [menteeBio, setMenteeBio] = useState('');
-  const [menteeSpheres, setMenteeSpheres] = useState<LifeSphere[]>(['PERSONAL_GROWTH', 'ACADEMIA_CAREER']);
+  // Edit-my-bio form state (mentors only), pre-filled from the current user
+  const [bioTitle, setBioTitle] = useState(currentUser.title);
+  const [bioLocation, setBioLocation] = useState(currentUser.location);
+  const [bioYearsInFaith, setBioYearsInFaith] = useState(currentUser.yearsInFaith);
+  const [bioChurch, setBioChurch] = useState(currentUser.churchCommunity);
+  const [bioShort, setBioShort] = useState(currentUser.bio);
+  const [bioFull, setBioFull] = useState(currentUser.fullBiography ?? '');
+  const [bioMinistryJourney, setBioMinistryJourney] = useState(currentUser.ministryJourney ?? '');
+  const [bioPhilosophy, setBioPhilosophy] = useState(currentUser.mentorshipPhilosophy ?? '');
+  const [bioAvailability, setBioAvailability] = useState(currentUser.availabilitySchedule ?? '');
+  const [bioScripture, setBioScripture] = useState(currentUser.favoriteScripture);
 
   // Pairing Request Form State
   const [pairingSphere, setPairingSphere] = useState<LifeSphere>('PERSONAL_GROWTH');
@@ -81,75 +84,26 @@ export const MentorMatchingView: React.FC<MentorMatchingViewProps> = ({
     return matchesSearch && matchesGift && matchesSphere;
   });
 
-  const handleRegisterMentor = (e: React.FormEvent) => {
+  const isMentor = currentUser.role === 'MENTOR_ELDER';
+
+  const handleSaveMyBio = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!mentorName.trim() || !mentorShortBio.trim()) return;
+    if (!bioShort.trim()) return;
 
-    const newMentor: UserProfile = {
-      id: `mentor_${Date.now()}`,
-      name: mentorName,
-      role: 'MENTOR_ELDER',
-      title: mentorTitle || 'Elder & Spiritual Discipler',
-      age: Number(mentorAge) || 50,
-      location: mentorLocation || 'Remote / Local Fellowship',
-      bio: mentorShortBio,
-      fullBiography: mentorFullBio || mentorShortBio,
-      ministryJourney: mentorMinistryJourney || 'Active in local church discipleship and Bible study leadership.',
-      mentorshipPhilosophy: mentorPhilosophy || 'Walking in faithful cross-generational discipleship modeled on 2 Timothy 2:2.',
-      availabilitySchedule: mentorAvailability || 'Flexible evenings and weekend video calls.',
-      spiritualGifts: mentorGifts.length > 0 ? mentorGifts : ['Wisdom & Counsel', 'Teaching'],
-      primarySpheres: mentorSpheres.length > 0 ? mentorSpheres : ['PERSONAL_GROWTH', 'ACADEMIA_CAREER'],
-      churchCommunity: mentorChurch || 'Bible Fellowship Church',
-      yearsInFaith: Number(mentorYearsInFaith) || 20,
-      email: `${mentorName.toLowerCase().replace(/\s+/g, '.')}@agapelink.org`,
-      phone: '+1 (555) 019-2834',
-      whatsappNumber: '15550192834',
-      telegramUsername: mentorName.toLowerCase().replace(/\s+/g, '_'),
-      isVerifiedElder: true,
-      activeMenteesCount: 0,
-      discipleshipHours: 40,
-      avatarInitial: mentorName.charAt(0).toUpperCase(),
-      favoriteScripture: mentorScripture,
-      badges: ['Ordained Elder', `${mentorYearsInFaith}+ Yrs Faith`, 'Available for Mentees']
-    };
-
-    onAddNewUser(newMentor);
-    setIsJoinMentorModalOpen(false);
-    setPairingSuccessToast(`Elder profile for ${mentorName} published! Mentees can now read your biography and connect.`);
-    setTimeout(() => setPairingSuccessToast(null), 5000);
-  };
-
-  const handleRegisterMentee = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!menteeName.trim() || !menteeBio.trim()) return;
-
-    const newMentee: UserProfile = {
-      id: `mentee_${Date.now()}`,
-      name: menteeName,
-      role: 'YOUNG_BELIEVER_MENTEE',
-      title: menteeTitle || 'Young Believer Seeking Discipleship',
-      age: Number(menteeAge) || 21,
-      location: menteeLocation || 'University / Local Fellowship',
-      bio: menteeBio,
-      spiritualGifts: ['Service', 'Evangelism'],
-      primarySpheres: menteeSpheres,
-      churchCommunity: menteeChurch || 'Local University Fellowship',
-      yearsInFaith: 1,
-      email: `${menteeName.toLowerCase().replace(/\s+/g, '.')}@agapelink.org`,
-      phone: '+1 (555) 012-9988',
-      whatsappNumber: '15550129988',
-      telegramUsername: menteeName.toLowerCase().replace(/\s+/g, '_'),
-      isVerifiedElder: false,
-      activeMenteesCount: 0,
-      discipleshipHours: 0,
-      avatarInitial: menteeName.charAt(0).toUpperCase(),
-      favoriteScripture: 'Philippians 4:13',
-      badges: ['Young Disciple', 'Seeking Mentor']
-    };
-
-    onAddNewUser(newMentee);
-    setIsJoinMenteeModalOpen(false);
-    setPairingSuccessToast(`Mentee account for ${menteeName} created! Choose an elder mentor below to begin.`);
+    onEditMyBio({
+      title: bioTitle.trim(),
+      location: bioLocation.trim(),
+      yearsInFaith: Number(bioYearsInFaith) || 0,
+      churchCommunity: bioChurch.trim(),
+      bio: bioShort.trim(),
+      fullBiography: bioFull.trim(),
+      ministryJourney: bioMinistryJourney.trim(),
+      mentorshipPhilosophy: bioPhilosophy.trim(),
+      availabilitySchedule: bioAvailability.trim(),
+      favoriteScripture: bioScripture.trim(),
+    });
+    setIsEditBioModalOpen(false);
+    setPairingSuccessToast('Your elder biography has been updated.');
     setTimeout(() => setPairingSuccessToast(null), 5000);
   };
 
@@ -158,24 +112,16 @@ export const MentorMatchingView: React.FC<MentorMatchingViewProps> = ({
     if (!isPairingRequestModalOpen) return;
 
     const targetMentor = isPairingRequestModalOpen;
-    const application: MentorshipApplication = {
-      id: `app_${Date.now()}`,
-      menteeId: currentUser.id,
-      menteeName: currentUser.name,
+    onApplyToMentor({
       mentorId: targetMentor.id,
-      mentorName: targetMentor.name,
-      chosenSphere: pairingSphere,
-      personalIntroduction: pairingIntro || 'Eager to grow under your biblical counsel and prayer guidance.',
+      sphere: pairingSphere,
+      introduction: pairingIntro || 'Eager to grow under your biblical counsel and prayer guidance.',
       growthDesire: pairingGoal || 'Cultivating deep spiritual habits and wisdom in daily life decisions.',
       meetingFrequency: pairingFrequency,
-      appliedDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-      status: 'ACTIVE'
-    };
-
-    onPairMentorAndMentee(targetMentor, currentUser, application);
+    });
     setIsPairingRequestModalOpen(null);
     setSelectedMentorForBio(null);
-    setPairingSuccessToast(`You have successfully chosen ${targetMentor.name} as your mentor! A launch session has been added.`);
+    setPairingSuccessToast(`Your mentorship application to ${targetMentor.name} has been sent — they'll review and accept it.`);
     setTimeout(() => setPairingSuccessToast(null), 5000);
   };
 
@@ -208,21 +154,16 @@ export const MentorMatchingView: React.FC<MentorMatchingViewProps> = ({
         </div>
 
         {/* Action Buttons */}
-        <div className="flex flex-wrap items-center gap-2.5">
-          <button
-            onClick={() => setIsJoinMentorModalOpen(true)}
-            className="px-4 py-2.5 rounded-2xl bg-stone-900 hover:bg-stone-800 text-white text-xs font-bold transition flex items-center gap-2 shadow-sm"
-          >
-            <Edit3 className="w-4 h-4 text-amber-400" /> Join / Edit Mentor Biography
-          </button>
-
-          <button
-            onClick={() => setIsJoinMenteeModalOpen(true)}
-            className="px-4 py-2.5 rounded-2xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold transition flex items-center gap-2 shadow-sm shadow-amber-950/20"
-          >
-            <UserPlus className="w-4 h-4" /> Sign Up as Mentee
-          </button>
-        </div>
+        {isMentor && (
+          <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              onClick={() => setIsEditBioModalOpen(true)}
+              className="px-4 py-2.5 rounded-2xl bg-stone-900 hover:bg-stone-800 text-white text-xs font-bold transition flex items-center gap-2 shadow-sm"
+            >
+              <Edit3 className="w-4 h-4 text-amber-400" /> Edit My Elder Biography
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Filter and Search Bar */}
@@ -627,88 +568,73 @@ export const MentorMatchingView: React.FC<MentorMatchingViewProps> = ({
         </div>
       )}
 
-      {/* MODAL 3: JOIN AS MENTOR & CREATE/EDIT BIOGRAPHY */}
-      {isJoinMentorModalOpen && (
+      {/* MODAL 3: EDIT MY ELDER BIOGRAPHY (mentors only, own profile) */}
+      {isEditBioModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/60 backdrop-blur-sm p-4 overflow-y-auto">
           <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 space-y-6 shadow-2xl border border-stone-200 my-8 animate-fade-in max-h-[90vh] overflow-y-auto">
-            
+
             <div className="flex items-start justify-between border-b border-stone-100 pb-4">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900">
-                    Elder & Mentor Registration
+                    Elder Biography
                   </span>
-                  <span className="text-xs text-stone-500">Cross-Generational Shepherding</span>
+                  <span className="text-xs text-stone-500">Visible to mentees browsing the directory</span>
                 </div>
                 <h2 className="text-xl font-bold font-serif-display text-stone-900">
-                  Create / Edit Elder Mentor Biography
+                  Edit My Elder Biography
                 </h2>
               </div>
               <button
-                onClick={() => setIsJoinMentorModalOpen(false)}
+                onClick={() => setIsEditBioModalOpen(false)}
                 className="p-2 rounded-full hover:bg-stone-100 text-stone-400 hover:text-stone-700 transition"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleRegisterMentor} className="space-y-4 text-xs">
-              
+            <form onSubmit={handleSaveMyBio} className="space-y-4 text-xs">
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="font-bold text-stone-700 block">Full Name & Title *</label>
+                  <label className="font-bold text-stone-700 block">Ministry Role / Profession</label>
                   <input
                     type="text"
-                    required
-                    placeholder="e.g., Elder Johnathan Davis"
-                    value={mentorName}
-                    onChange={(e) => setMentorName(e.target.value)}
-                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3.5 py-2.5 text-stone-900 focus:outline-none focus:border-amber-600"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="font-bold text-stone-700 block">Ministry Role / Profession *</label>
-                  <input
-                    type="text"
-                    required
                     placeholder="e.g., Church Elder & Business Executive"
-                    value={mentorTitle}
-                    onChange={(e) => setMentorTitle(e.target.value)}
+                    value={bioTitle}
+                    onChange={(e) => setBioTitle(e.target.value)}
                     className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3.5 py-2.5 text-stone-900 focus:outline-none focus:border-amber-600"
                   />
                 </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="space-y-1.5">
-                  <label className="font-bold text-stone-700 block">Years Walking in Faith</label>
-                  <input
-                    type="number"
-                    value={mentorYearsInFaith}
-                    onChange={(e) => setMentorYearsInFaith(Number(e.target.value))}
-                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-stone-900 focus:outline-none focus:border-amber-600"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="font-bold text-stone-700 block">Church Fellowship</label>
-                  <input
-                    type="text"
-                    placeholder="e.g., Grace Community Church"
-                    value={mentorChurch}
-                    onChange={(e) => setMentorChurch(e.target.value)}
-                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-stone-900 focus:outline-none focus:border-amber-600"
-                  />
-                </div>
-
                 <div className="space-y-1.5">
                   <label className="font-bold text-stone-700 block">Location</label>
                   <input
                     type="text"
                     placeholder="e.g., Dallas, TX (Remote OK)"
-                    value={mentorLocation}
-                    onChange={(e) => setMentorLocation(e.target.value)}
+                    value={bioLocation}
+                    onChange={(e) => setBioLocation(e.target.value)}
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3.5 py-2.5 text-stone-900 focus:outline-none focus:border-amber-600"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="font-bold text-stone-700 block">Years Walking in Faith</label>
+                  <input
+                    type="number"
+                    value={bioYearsInFaith}
+                    onChange={(e) => setBioYearsInFaith(Number(e.target.value))}
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-stone-900 focus:outline-none focus:border-amber-600"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="font-bold text-stone-700 block">Church Fellowship</label>
+                  <input
+                    type="text"
+                    placeholder="e.g., Grace Community Church"
+                    value={bioChurch}
+                    onChange={(e) => setBioChurch(e.target.value)}
                     className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-stone-900 focus:outline-none focus:border-amber-600"
                   />
                 </div>
@@ -720,20 +646,19 @@ export const MentorMatchingView: React.FC<MentorMatchingViewProps> = ({
                   type="text"
                   required
                   placeholder="A concise summary of your faith journey and passions..."
-                  value={mentorShortBio}
-                  onChange={(e) => setMentorShortBio(e.target.value)}
+                  value={bioShort}
+                  onChange={(e) => setBioShort(e.target.value)}
                   className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3.5 py-2.5 text-stone-900 focus:outline-none focus:border-amber-600"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="font-bold text-stone-700 block">Full Biography & Faith Testimony *</label>
+                <label className="font-bold text-stone-700 block">Full Biography & Faith Testimony</label>
                 <textarea
-                  required
                   rows={4}
                   placeholder="Share your detailed life testimony: how God called you, career trials, marriage/family wisdom, and why you feel burdened to disciple young believers..."
-                  value={mentorFullBio}
-                  onChange={(e) => setMentorFullBio(e.target.value)}
+                  value={bioFull}
+                  onChange={(e) => setBioFull(e.target.value)}
                   className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3 text-stone-900 focus:outline-none focus:border-amber-600"
                 />
               </div>
@@ -744,19 +669,18 @@ export const MentorMatchingView: React.FC<MentorMatchingViewProps> = ({
                   <input
                     type="text"
                     placeholder="e.g., 2 Timothy 2:2 life-on-life biblical mentoring"
-                    value={mentorPhilosophy}
-                    onChange={(e) => setMentorPhilosophy(e.target.value)}
+                    value={bioPhilosophy}
+                    onChange={(e) => setBioPhilosophy(e.target.value)}
                     className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3.5 py-2.5 text-stone-900 focus:outline-none focus:border-amber-600"
                   />
                 </div>
-
                 <div className="space-y-1.5">
                   <label className="font-bold text-stone-700 block">Availability & Meeting Schedule</label>
                   <input
                     type="text"
                     placeholder="e.g., Tuesdays & Thursdays 6-8 PM EST"
-                    value={mentorAvailability}
-                    onChange={(e) => setMentorAvailability(e.target.value)}
+                    value={bioAvailability}
+                    onChange={(e) => setBioAvailability(e.target.value)}
                     className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3.5 py-2.5 text-stone-900 focus:outline-none focus:border-amber-600"
                   />
                 </div>
@@ -767,16 +691,27 @@ export const MentorMatchingView: React.FC<MentorMatchingViewProps> = ({
                 <input
                   type="text"
                   placeholder="e.g., Romans 12:1-2"
-                  value={mentorScripture}
-                  onChange={(e) => setMentorScripture(e.target.value)}
+                  value={bioScripture}
+                  onChange={(e) => setBioScripture(e.target.value)}
                   className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3.5 py-2.5 text-stone-900 focus:outline-none focus:border-amber-600"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-bold text-stone-700 block">Ministry Journey</label>
+                <textarea
+                  rows={3}
+                  placeholder="Highlights of your ministry track record..."
+                  value={bioMinistryJourney}
+                  onChange={(e) => setBioMinistryJourney(e.target.value)}
+                  className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3 text-stone-900 focus:outline-none focus:border-amber-600"
                 />
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-stone-100">
                 <button
                   type="button"
-                  onClick={() => setIsJoinMentorModalOpen(false)}
+                  onClick={() => setIsEditBioModalOpen(false)}
                   className="px-4 py-2.5 rounded-xl border border-stone-200 text-stone-600 font-bold hover:bg-stone-50"
                 >
                   Cancel
@@ -785,100 +720,7 @@ export const MentorMatchingView: React.FC<MentorMatchingViewProps> = ({
                   type="submit"
                   className="px-6 py-2.5 rounded-xl bg-stone-900 hover:bg-stone-800 text-white font-bold transition shadow-sm"
                 >
-                  Publish Mentor Profile
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL 4: JOIN AS MENTEE */}
-      {isJoinMenteeModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/60 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 space-y-6 shadow-2xl border border-stone-200 my-8 animate-fade-in">
-            
-            <div className="flex items-start justify-between border-b border-stone-100 pb-4">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900">
-                    Mentee Registration
-                  </span>
-                  <span className="text-xs text-stone-500">Young Believer Account</span>
-                </div>
-                <h2 className="text-xl font-bold font-serif-display text-stone-900">
-                  Register as Young Believer / Mentee
-                </h2>
-              </div>
-              <button
-                onClick={() => setIsJoinMenteeModalOpen(false)}
-                className="p-2 rounded-full hover:bg-stone-100 text-stone-400 hover:text-stone-700 transition"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleRegisterMentee} className="space-y-4 text-xs">
-              <div className="space-y-1.5">
-                <label className="font-bold text-stone-700 block">Full Name *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g., Sarah Chen"
-                  value={menteeName}
-                  onChange={(e) => setMenteeName(e.target.value)}
-                  className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3.5 py-2.5 text-stone-900 focus:outline-none focus:border-amber-600"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="font-bold text-stone-700 block">Occupation / Major</label>
-                  <input
-                    type="text"
-                    placeholder="e.g., Nursing Student"
-                    value={menteeTitle}
-                    onChange={(e) => setMenteeTitle(e.target.value)}
-                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-stone-900 focus:outline-none focus:border-amber-600"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="font-bold text-stone-700 block">Age</label>
-                  <input
-                    type="number"
-                    value={menteeAge}
-                    onChange={(e) => setMenteeAge(Number(e.target.value))}
-                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-stone-900 focus:outline-none focus:border-amber-600"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="font-bold text-stone-700 block">Discipleship Desire & Background *</label>
-                <textarea
-                  required
-                  rows={3}
-                  placeholder="Describe what spiritual growth areas, career ethics, or prayer disciplines you desire guidance on..."
-                  value={menteeBio}
-                  onChange={(e) => setMenteeBio(e.target.value)}
-                  className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3 text-stone-900 focus:outline-none focus:border-amber-600"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-stone-100">
-                <button
-                  type="button"
-                  onClick={() => setIsJoinMenteeModalOpen(false)}
-                  className="px-4 py-2.5 rounded-xl border border-stone-200 text-stone-600 font-bold hover:bg-stone-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold transition shadow-sm"
-                >
-                  Create Mentee Profile
+                  Save Biography
                 </button>
               </div>
             </form>
