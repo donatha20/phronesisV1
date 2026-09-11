@@ -83,7 +83,7 @@ export const ResourceLibraryView: React.FC<ResourceLibraryViewProps> = ({
       description: newDescription,
       readTime: newReadTime,
       isBookmarked: false,
-      rating: 5.0,
+      rating: 0, // no rating feature exists yet — matches the server's default until one does
       accessTier: newAccessTier,
       fileSize: newFile ? formatFileSize(newFile.size) : 'External link',
       enrolledUsersCount: 1,

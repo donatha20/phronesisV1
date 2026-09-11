@@ -29,6 +29,7 @@ export const qk = {
   episodes: ['episodes'] as const,
   resources: ['resources'] as const,
   mentors: ['mentors'] as const,
+  mentees: ['mentees'] as const,
   security: ['security'] as const,
   adminRoles: ['admin-roles'] as const,
   adminUsers: ['admin-users'] as const,
@@ -158,6 +159,14 @@ export function useDevotionMutations() {
   });
 
   return { create, toggleLike, addComment };
+}
+
+/** Records that the caller opened a devotion — feeds the header's streak. */
+export function useMarkDevotionRead() {
+  return useMutation({
+    mutationFn: (devotionId: string) =>
+      apiFetch(`/api/devotions/${devotionId}/mark_read/`, { method: 'POST' }),
+  });
 }
 
 // ---- Prayers -------------------------------------------------------
@@ -406,6 +415,15 @@ export function useMentorsDirectory() {
   return useQuery({
     queryKey: qk.mentors,
     queryFn: () => list<ApiUser>('/api/mentors/').then((rows) => rows.map((u) => apiUserToProfile(u))),
+  });
+}
+
+/** Privacy-scoped: a mentor's own active mentees, or (for an admin) everyone.
+ * Empty for any other caller — there's no `/api/mentees/` visibility beyond that. */
+export function useMenteesDirectory() {
+  return useQuery({
+    queryKey: qk.mentees,
+    queryFn: () => list<ApiUser>('/api/mentees/').then((rows) => rows.map((u) => apiUserToProfile(u))),
   });
 }
 

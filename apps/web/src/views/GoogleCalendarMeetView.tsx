@@ -23,13 +23,13 @@ import { createGoogleMeetSpace, GoogleMeetSpace } from '../services/googleMeetSe
 interface GoogleCalendarMeetViewProps {
   currentUser: UserProfile;
   sessions: DiscipleshipSession[];
-  onSchedulePlatformSession?: (session: DiscipleshipSession) => void;
+  mentors: UserProfile[];
 }
 
 export const GoogleCalendarMeetView: React.FC<GoogleCalendarMeetViewProps> = ({
   currentUser,
   sessions,
-  onSchedulePlatformSession
+  mentors,
 }) => {
   const [isConnected, setIsConnected] = useState(false);
   const [googleUser, setGoogleUser] = useState<{ email: string } | null>(null);
@@ -54,7 +54,7 @@ export const GoogleCalendarMeetView: React.FC<GoogleCalendarMeetViewProps> = ({
   const [eventTitle, setEventTitle] = useState('');
   const [sphereFocus, setSphereFocus] = useState<LifeSphere>('PERSONAL_GROWTH');
   const [mentorEmail, setMentorEmail] = useState('');
-  const [mentorName, setMentorName] = useState('Elder Thomas Bradley');
+  const [mentorName, setMentorName] = useState('');
   const [eventStartDate, setEventStartDate] = useState(() => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
@@ -94,6 +94,14 @@ export const GoogleCalendarMeetView: React.FC<GoogleCalendarMeetViewProps> = ({
       })
       .catch(() => setIsConnected(false));
   }, []);
+
+  // Default the "Senior Mentor" picker to the first real mentor once loaded.
+  useEffect(() => {
+    if (!mentorName && mentors.length > 0) {
+      setMentorName(mentors[0].name);
+      setMentorEmail(mentors[0].email);
+    }
+  }, [mentors, mentorName]);
 
   const handleGoogleSignIn = () => {
     setIsLoadingAuth(true);
@@ -196,28 +204,6 @@ Scheduled via Phronesis Mentorship Platform`;
       setEventTitle('');
       setEventAgenda('');
       fetchEvents();
-
-      // Optionally record into platform state
-      if (onSchedulePlatformSession) {
-        const meetUrl = getMeetLinkFromEvent(createdEvent);
-        onSchedulePlatformSession({
-          id: `sess_gcal_${Date.now()}`,
-          menteeId: currentUser.id,
-          menteeName: currentUser.name,
-          mentorId: 'mentor_gcal',
-          mentorName,
-          scheduledTime: startDateTime.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }),
-          durationMinutes,
-          sphereFocus,
-          topic: eventTitle.trim(),
-          scriptureText: scriptureAnchor,
-          platform: meetUrl ? 'GOOGLE_MEET' : 'IN_APP_VIDEO',
-          status: 'SCHEDULED',
-          meetingNotes: eventAgenda || 'Synced with Google Calendar & Google Meet.',
-          actionItems: ['Join via Google Meet at appointment start', 'Review scripture meditation'],
-          postSessionPrayer: 'The Lord establish the work of your hands.'
-        });
-      }
     } catch (err: any) {
       showToast(err.message, 'error');
     } finally {
@@ -742,16 +728,20 @@ Synced from Phronesis Mentorship Platform`;
                   <select
                     value={mentorName}
                     onChange={(e) => {
+                      const selected = mentors.find((m) => m.name === e.target.value);
                       setMentorName(e.target.value);
-                      if (e.target.value.includes('Thomas')) setMentorEmail('thomas.bradley@phronesis.church');
-                      if (e.target.value.includes('Deborah')) setMentorEmail('deborah.vance@phronesis.church');
-                      if (e.target.value.includes('Samuel')) setMentorEmail('samuel.osei@phronesis.church');
+                      setMentorEmail(selected?.email ?? '');
                     }}
+                    disabled={mentors.length === 0}
                     className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-stone-900 focus:outline-none focus:border-amber-600 font-medium"
                   >
-                    <option value="Elder Thomas Bradley">Elder Thomas Bradley</option>
-                    <option value="Pastor Deborah Vance">Pastor Deborah Vance</option>
-                    <option value="Dr. Samuel Osei">Dr. Samuel Osei</option>
+                    {mentors.length === 0 ? (
+                      <option value="">No mentors available</option>
+                    ) : (
+                      mentors.map((m) => (
+                        <option key={m.id} value={m.name}>{m.name}</option>
+                      ))
+                    )}
                   </select>
                 </div>
 

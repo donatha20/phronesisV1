@@ -16,6 +16,7 @@ export interface CreatePrayerInput {
 interface PrayerVaultViewProps {
   prayers: PrayerRequest[];
   currentUser: UserProfile;
+  pairedMentor: { id: string; name: string } | null;
   vaultUnlocked: boolean;
   onAddPrayer: (input: CreatePrayerInput) => void;
   onTogglePrayed: (id: string) => void;
@@ -26,6 +27,7 @@ interface PrayerVaultViewProps {
 export const PrayerVaultView: React.FC<PrayerVaultViewProps> = ({
   prayers,
   currentUser,
+  pairedMentor,
   vaultUnlocked,
   onAddPrayer,
   onTogglePrayed,
@@ -354,7 +356,7 @@ export const PrayerVaultView: React.FC<PrayerVaultViewProps> = ({
                     className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3.5 py-2 text-xs text-stone-900 focus:outline-none focus:border-amber-600"
                   >
                     <option value="PRIVATE_VAULT">🔒 Private (Secret Place Only)</option>
-                    <option value="MENTOR_ONLY">👥 Shared with Mentor (Elder Thomas)</option>
+                    <option value="MENTOR_ONLY">👥 Shared with Mentor{pairedMentor ? ` (${pairedMentor.name})` : ''}</option>
                     <option value="COMMUNITY_INTERCESSORS">🕊️ Church Intercessors Pool</option>
                   </select>
                 </div>

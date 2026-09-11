@@ -18,6 +18,7 @@ class UserSerializer(serializers.ModelSerializer):
     # so clients can gate UI/behavior on this instead of the specific slug.
     role_base_kind = serializers.CharField(source="role.base_kind", read_only=True)
     role_name = serializers.CharField(source="role.name", read_only=True)
+    devotion_streak_days = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -53,6 +54,7 @@ class UserSerializer(serializers.ModelSerializer):
             "is_verified_elder",
             "active_mentees_count",
             "discipleship_hours",
+            "devotion_streak_days",
             "date_joined",
         )
         read_only_fields = (
@@ -64,6 +66,17 @@ class UserSerializer(serializers.ModelSerializer):
             "discipleship_hours",
             "date_joined",
         )
+
+    def get_devotion_streak_days(self, obj: User) -> int:
+        """Only meaningful (and only computed) for the signed-in user's own
+        record — avoids an N+1 query per row in listings like the mentor
+        directory, where nobody's streak but your own is relevant."""
+        request = self.context.get("request")
+        if request is None or not getattr(request, "user", None) or request.user.id != obj.id:
+            return 0
+        from apps.devotions.services import compute_streak_days
+
+        return compute_streak_days(obj)
 
 
 class SecuritySettingsSerializer(serializers.ModelSerializer):

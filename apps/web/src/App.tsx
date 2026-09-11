@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { UserProfile, DiscipleshipSession, PodcastEpisode } from './types';
-import { initialMentees } from './data/sampleData';
 import { Header, ActiveTab } from './components/Header';
 import { DashboardView } from './views/DashboardView';
 import { DailyDevotionsView } from './views/DailyDevotionsView';
@@ -28,13 +27,13 @@ import { apiUserToProfile } from './auth/adapt';
 
 import {
   useGoals, useGoalMutations,
-  useDevotions, useDevotionComments, useDevotionMutations,
+  useDevotions, useDevotionComments, useDevotionMutations, useMarkDevotionRead,
   usePrayers, useVaultStatus, usePrayerMutations,
   useSessions, useSessionMutations,
   useMyMentorship,
   useEpisodes, useEpisodeMutations,
   useResources, useResourceMutations,
-  useMentorsDirectory, useMentorshipMutations, useUpdateMyProfile,
+  useMentorsDirectory, useMenteesDirectory, useMentorshipMutations, useUpdateMyProfile,
   useMySecuritySettings, useSecurityMutations,
 } from './api/hooks';
 import { episodeToCreateInput, resourceToCreateInput } from './api/adapters';
@@ -90,6 +89,11 @@ const AuthedApp: React.FC = () => {
   const [selectedDevotionId, setSelectedDevotionId] = useState<string | null>(null);
   const commentsQuery = useDevotionComments(selectedDevotionId);
   const comments = commentsQuery.data ?? [];
+  const markDevotionRead = useMarkDevotionRead();
+  const handleSelectDevotion = (id: string) => {
+    setSelectedDevotionId(id);
+    markDevotionRead.mutate(id, { onSuccess: () => auth.refresh() });
+  };
 
   const prayersQuery = usePrayers();
   const vaultStatusQuery = useVaultStatus();
@@ -116,7 +120,8 @@ const AuthedApp: React.FC = () => {
 
   const mentorsQuery = useMentorsDirectory();
   const mentors = mentorsQuery.data ?? [];
-  const mentees = initialMentees; // no safe/authorized backend directory for mentees yet
+  const menteesQuery = useMenteesDirectory();
+  const mentees = menteesQuery.data ?? [];
   const mentorshipMutations = useMentorshipMutations();
   const updateMyProfile = useUpdateMyProfile();
 
@@ -176,7 +181,7 @@ const AuthedApp: React.FC = () => {
             devotions={devotions}
             currentUser={currentUser}
             comments={comments}
-            onSelectDevotion={setSelectedDevotionId}
+            onSelectDevotion={handleSelectDevotion}
             onPlayAudio={(dev) => setActiveAudio({
               title: dev.title, speaker: dev.authorName,
               duration: dev.audioDurationSeconds, url: dev.audioVoiceNoteUrl,
@@ -239,6 +244,7 @@ const AuthedApp: React.FC = () => {
           <PrayerVaultView
             prayers={prayers}
             currentUser={currentUser}
+            pairedMentor={pairedMentor}
             vaultUnlocked={vaultStatusQuery.data?.unlocked ?? false}
             onAddPrayer={(input) => prayerMutations.create.mutate(input)}
             onTogglePrayed={(id) => {
@@ -326,10 +332,7 @@ const AuthedApp: React.FC = () => {
           <GoogleCalendarMeetView
             currentUser={currentUser}
             sessions={sessions}
-            onSchedulePlatformSession={() => {
-              // Google Calendar/Meet sync moves server-side in migration phase P5;
-              // this surface is dormant until then (see services/googleAuth.ts).
-            }}
+            mentors={mentors}
           />
         )}
 

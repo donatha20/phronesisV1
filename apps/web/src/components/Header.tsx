@@ -86,10 +86,12 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Quick Actions & Role Switcher */}
           <div className="flex items-center gap-3">
             {/* Streak indicator */}
-            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-bold">
-              <Flame className="w-4 h-4 text-amber-500 fill-amber-500" />
-              <span>24d Streak</span>
-            </div>
+            {currentUser.devotionStreakDays > 0 && (
+              <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-bold">
+                <Flame className="w-4 h-4 text-amber-500 fill-amber-500" />
+                <span>{currentUser.devotionStreakDays}d Streak</span>
+              </div>
+            )}
 
             {/* AI Spiritual Companion Button */}
             <button

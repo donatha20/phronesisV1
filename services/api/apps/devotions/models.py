@@ -67,6 +67,25 @@ class DevotionComment(BaseModel):
         return f"comment on {self.devotion_id}"
 
 
+class DevotionReadLog(BaseModel):
+    """One row per (user, devotion) the user has opened — the basis for the
+    daily-devotion streak shown in the header. ``created_at`` is the day it
+    counts toward; a user reading the same devotion twice doesn't inflate it
+    (unique constraint), and reading is a deliberate action (not implied by,
+    say, a list query), so it isn't attributable to viewing the app broadly.
+    """
+
+    devotion = models.ForeignKey(Devotion, on_delete=models.CASCADE, related_name="read_logs")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="devotion_reads"
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["devotion", "user"], name="uniq_devotion_read")
+        ]
+
+
 class DevotionCommentLike(BaseModel):
     comment = models.ForeignKey(DevotionComment, on_delete=models.CASCADE, related_name="likes")
     user = models.ForeignKey(

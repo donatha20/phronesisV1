@@ -38,7 +38,6 @@ export const SpheresGoalsView: React.FC<SpheresGoalsViewProps> = ({
   const [goalScripture, setGoalScripture] = useState('');
   const [goalDate, setGoalDate] = useState('');
   const [goalMilestonesText, setGoalMilestonesText] = useState('');
-  const [assignedMentor, setAssignedMentor] = useState('Elder Thomas Bradley');
 
   const sphereDefinitions = [
     { id: 'PERSONAL_GROWTH', label: 'Personal Growth & Prayer', color: 'border-amber-500 bg-amber-50 text-amber-900', desc: 'Secret place intimacy, Scripture memorization, theology study' },

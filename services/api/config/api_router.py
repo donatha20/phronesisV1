@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from rest_framework.routers import DefaultRouter
 
-from apps.accounts.views import AdminUserViewSet, MentorDirectoryViewSet, RoleViewSet
+from apps.accounts.views import (
+    AdminUserViewSet,
+    MenteeDirectoryViewSet,
+    MentorDirectoryViewSet,
+    RoleViewSet,
+)
 from apps.devotions.views import DevotionViewSet
 from apps.goals.views import GoalViewSet
 from apps.media.views import PodcastEpisodeViewSet
@@ -13,6 +18,7 @@ from apps.sessions.views import DiscipleshipSessionViewSet
 
 router = DefaultRouter()
 router.register("mentors", MentorDirectoryViewSet, basename="mentor")
+router.register("mentees", MenteeDirectoryViewSet, basename="mentee")
 router.register("admin/roles", RoleViewSet, basename="admin-role")
 router.register("admin/users", AdminUserViewSet, basename="admin-user")
 router.register("mentorship-applications", MentorshipApplicationViewSet, basename="mentorship-application")

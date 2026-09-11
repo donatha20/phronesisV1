@@ -13,7 +13,7 @@ from apps.audit.services import record
 from apps.common.permissions import is_admin
 from apps.common.viewsets import AuditedModelViewSet
 
-from .models import Devotion, DevotionComment, DevotionCommentLike, DevotionLike
+from .models import Devotion, DevotionComment, DevotionCommentLike, DevotionLike, DevotionReadLog
 from .serializers import DevotionCommentSerializer, DevotionSerializer
 
 
@@ -59,6 +59,15 @@ class DevotionViewSet(AuditedModelViewSet):
         else:
             DevotionLike.objects.filter(devotion=devotion, user=request.user).delete()
         return Response(self.get_serializer(self.get_queryset().get(pk=devotion.pk)).data)
+
+    @action(detail=True, methods=["post"])
+    def mark_read(self, request, pk=None):  # type: ignore[no-untyped-def]
+        """Records that the caller opened this devotion — feeds the daily
+        streak (`UserSerializer.devotion_streak_days`). Idempotent per user
+        per devotion, so re-opening it doesn't change anything."""
+        devotion = self.get_object()
+        DevotionReadLog.objects.get_or_create(devotion=devotion, user=request.user)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     # --- comments -----------------------------------------------------
     @action(detail=True, methods=["get", "post"])

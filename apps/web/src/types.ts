@@ -56,6 +56,7 @@ export interface UserProfile {
   isVerifiedElder: boolean;
   activeMenteesCount: number;
   discipleshipHours: number;
+  devotionStreakDays: number;
   avatarInitial: string;
   favoriteScripture: string;
   badges: string[];

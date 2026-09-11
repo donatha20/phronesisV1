@@ -19,13 +19,15 @@ from rest_framework import generics, mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.filters import SearchFilter
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.audit.models import AuditAction
 from apps.audit.services import record
-from apps.common.permissions import IsAdmin
+from apps.common.permissions import IsAdmin, is_admin, is_mentor
 from apps.common.viewsets import AuditedModelViewSet
+from apps.mentorship.models import Mentorship
 
 from .google_oauth import GoogleOAuthError, build_authorization_url, exchange_code_for_identity
 from .models import Role, SecuritySettings, UserRole
@@ -125,6 +127,36 @@ class MentorDirectoryViewSet(
     filter_backends = [DjangoFilterBackend, SearchFilter]
     filterset_fields = ["is_verified_elder"]
     search_fields = ["first_name", "last_name", "title", "church_community"]
+
+
+class MenteeDirectoryViewSet(
+    mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet
+):
+    """Privacy-scoped mentee directory (`GET /api/mentees/`).
+
+    Unlike the mentor directory (public — elders want to be found), mentee
+    profiles are only visible to the mentor they're actively paired with, or
+    to admins. There's no legitimate reason for anyone else to browse young
+    believers' profiles at large, so every other caller sees an empty list.
+    """
+
+    serializer_class = UserSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):  # type: ignore[no-untyped-def]
+        user = self.request.user
+        if is_admin(user):
+            return User.objects.filter(role__base_kind=UserRole.MENTEE, is_active=True).order_by(
+                "first_name", "last_name"
+            )
+        if is_mentor(user):
+            mentee_ids = Mentorship.objects.filter(mentor=user, is_active=True).values_list(
+                "mentee_id", flat=True
+            )
+            return User.objects.filter(id__in=mentee_ids, is_active=True).order_by(
+                "first_name", "last_name"
+            )
+        return User.objects.none()
 
 
 class RoleViewSet(AuditedModelViewSet):

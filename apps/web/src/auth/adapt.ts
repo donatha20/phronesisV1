@@ -28,7 +28,7 @@ export function blankProfileTemplate(): UserProfile {
     fullBiography: '', ministryJourney: '', mentorshipPhilosophy: '', availabilitySchedule: '',
     spiritualGifts: [], primarySpheres: [], churchCommunity: '', yearsInFaith: 0,
     email: '', phone: '', whatsappNumber: '', telegramUsername: '', isVerifiedElder: false,
-    activeMenteesCount: 0, discipleshipHours: 0, avatarInitial: '', favoriteScripture: '',
+    activeMenteesCount: 0, discipleshipHours: 0, devotionStreakDays: 0, avatarInitial: '', favoriteScripture: '',
     badges: [],
   };
 }
@@ -67,6 +67,7 @@ export function apiUserToProfile(api: ApiUser, template: UserProfile = blankProf
     isVerifiedElder: api.is_verified_elder,
     activeMenteesCount: api.active_mentees_count,
     discipleshipHours: api.discipleship_hours,
+    devotionStreakDays: api.devotion_streak_days,
     avatarInitial: api.avatar_initial || template.avatarInitial,
   };
 }

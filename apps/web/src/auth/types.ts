@@ -36,6 +36,9 @@ export interface ApiUser {
   is_verified_elder: boolean;
   active_mentees_count: number;
   discipleship_hours: number;
+  /** Consecutive days ending today/yesterday with at least one devotion
+   * opened. Always 0 when read on someone else's profile (self-only). */
+  devotion_streak_days: number;
   date_joined: string;
 }
 
