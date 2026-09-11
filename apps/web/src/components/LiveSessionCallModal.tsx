@@ -1,44 +1,33 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  X, Mic, MicOff, Video, VideoOff, PhoneOff, BookOpen, 
-  CheckSquare, FileText, Sparkles, MessageSquare, HandHeart, Users,
-  ExternalLink
+import React, { useState } from 'react';
+import {
+  X, PhoneOff, BookOpen, CheckSquare, FileText, Sparkles, HandHeart,
+  ExternalLink, Video, Loader2, AlertCircle
 } from 'lucide-react';
 import { DiscipleshipSession } from '../types';
+import { ApiError } from '../lib/api';
 
 interface LiveSessionCallModalProps {
   session: DiscipleshipSession | null;
   onClose: () => void;
   onCompleteSession: (sessionId: string, newNotes: string, actionItems: string[]) => void;
+  onGenerateMeetLink: (sessionId: string) => Promise<void>;
+  isGeneratingMeetLink: boolean;
 }
 
 export const LiveSessionCallModal: React.FC<LiveSessionCallModalProps> = ({
   session,
   onClose,
-  onCompleteSession
+  onCompleteSession,
+  onGenerateMeetLink,
+  isGeneratingMeetLink
 }) => {
-  if (!session) return null;
-
-  const [isMicOn, setIsMicOn] = useState(true);
-  const [isVideoOn, setIsVideoOn] = useState(true);
-  const [callDuration, setCallDuration] = useState(128); // seconds elapsed
   const [activeTab, setActiveTab] = useState<'NOTES' | 'SCRIPTURE' | 'ACTIONS'>('NOTES');
-  const [notes, setNotes] = useState(session.meetingNotes);
-  const [actionItems, setActionItems] = useState<string[]>(session.actionItems);
+  const [notes, setNotes] = useState(session?.meetingNotes ?? '');
+  const [actionItems, setActionItems] = useState<string[]>(session?.actionItems ?? []);
   const [newActionItem, setNewActionItem] = useState('');
+  const [meetLinkError, setMeetLinkError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCallDuration((prev) => prev + 1);
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const formatTimer = (seconds: number) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m}:${s < 10 ? '0' : ''}${s}`;
-  };
+  if (!session) return null;
 
   const handleAddActionItem = () => {
     if (!newActionItem.trim()) return;
@@ -51,10 +40,23 @@ export const LiveSessionCallModal: React.FC<LiveSessionCallModalProps> = ({
     onClose();
   };
 
+  const handleGenerateMeetLink = async () => {
+    setMeetLinkError(null);
+    try {
+      await onGenerateMeetLink(session.id);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        setMeetLinkError('Connect your Google account from the Google Drive tab first to generate a Meet link.');
+      } else {
+        setMeetLinkError('Could not generate a Google Meet link. Please try again.');
+      }
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-stone-950/90 backdrop-blur-md animate-fade-in">
       <div className="bg-stone-900 border border-stone-800 rounded-3xl w-full max-w-5xl h-[92vh] flex flex-col overflow-hidden text-stone-100 shadow-2xl">
-        
+
         {/* Top Header Bar */}
         <div className="px-6 py-3.5 border-b border-stone-800 bg-stone-950/60 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -64,111 +66,80 @@ export const LiveSessionCallModal: React.FC<LiveSessionCallModalProps> = ({
             </span>
             <div>
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                Live Discipleship Session: {session.topic}
+                Discipleship Session: {session.topic}
               </h3>
               <p className="text-xs text-stone-400">
-                Connected with <strong className="text-amber-400">{session.mentorName}</strong> & <strong className="text-stone-300">{session.menteeName}</strong>
+                Between <strong className="text-amber-400">{session.mentorName}</strong> & <strong className="text-stone-300">{session.menteeName}</strong>
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <span className="font-mono text-xs px-3 py-1 rounded-full bg-stone-800 text-amber-300 border border-stone-700">
-              {formatTimer(callDuration)}
-            </span>
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-lg text-stone-400 hover:text-stone-100 hover:bg-stone-800 transition"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-stone-400 hover:text-stone-100 hover:bg-stone-800 transition"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
-        {/* Center Grid: Call Video Streams (Left) + Collaborative Discipleship Panel (Right) */}
+        {/* Center Grid: Meet Link Panel (Left) + Collaborative Discipleship Panel (Right) */}
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-0 overflow-hidden">
-          
-          {/* Left: Video Streams (7 cols) */}
-          <div className="lg:col-span-7 p-4 bg-stone-950 flex flex-col justify-between gap-4 overflow-y-auto">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 flex-1">
-              
-              {/* Mentor Video Feed */}
-              <div className="relative rounded-2xl bg-stone-900 border border-stone-800 overflow-hidden flex items-center justify-center min-h-[220px]">
-                <div className="absolute inset-0 bg-gradient-to-b from-stone-900/40 via-transparent to-stone-950/80 pointer-events-none" />
-                <div className="text-center p-4 z-10">
-                  <div className="w-20 h-20 mx-auto rounded-full bg-amber-700/40 border-2 border-amber-500/60 flex items-center justify-center text-2xl font-bold text-amber-200 mb-2">
-                    T
-                  </div>
-                  <h4 className="text-sm font-bold text-white">{session.mentorName}</h4>
-                  <p className="text-xs text-amber-400/90 font-medium">Senior Elder & Mentor</p>
-                  <div className="inline-flex items-center gap-1.5 px-2 py-0.5 mt-2 rounded-md bg-stone-800/80 text-[10px] text-emerald-400 font-mono">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Audio Active
-                  </div>
-                </div>
-                <div className="absolute bottom-3 left-3 z-20 text-[11px] px-2 py-0.5 rounded bg-black/60 text-stone-300 backdrop-blur-sm">
-                  Austin, TX (Remote)
-                </div>
-              </div>
 
-              {/* Mentee Video Feed */}
-              <div className="relative rounded-2xl bg-stone-900 border border-stone-800 overflow-hidden flex items-center justify-center min-h-[220px]">
-                {isVideoOn ? (
-                  <div className="text-center p-4 z-10">
-                    <div className="w-20 h-20 mx-auto rounded-full bg-stone-800 border-2 border-stone-700 flex items-center justify-center text-2xl font-bold text-stone-300 mb-2">
-                      J
-                    </div>
-                    <h4 className="text-sm font-bold text-white">{session.menteeName}</h4>
-                    <p className="text-xs text-stone-400">Young Believer (You)</p>
-                    <div className="inline-flex items-center gap-1.5 px-2 py-0.5 mt-2 rounded-md bg-stone-800/80 text-[10px] text-emerald-400 font-mono">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Speaking
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-center p-4">
-                    <div className="w-14 h-14 mx-auto rounded-full bg-stone-800 flex items-center justify-center text-stone-500 mb-2">
-                      <VideoOff className="w-6 h-6" />
-                    </div>
-                    <p className="text-xs text-stone-500">Camera Paused</p>
-                  </div>
-                )}
-                <div className="absolute bottom-3 left-3 z-20 text-[11px] px-2 py-0.5 rounded bg-black/60 text-stone-300 backdrop-blur-sm">
-                  Seattle, WA
-                </div>
-              </div>
+          {/* Left: Join / Generate Meet Link (7 cols) */}
+          <div className="lg:col-span-7 p-4 bg-stone-950 flex flex-col justify-center items-center gap-5 overflow-y-auto text-center">
+            <div className="w-20 h-20 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center">
+              <Video className="w-9 h-9 text-emerald-400" />
             </div>
 
-            {/* In-Call Controls Bar */}
-            <div className="p-3 bg-stone-900/90 border border-stone-800 rounded-2xl flex flex-wrap items-center justify-center gap-3">
-              <button
-                onClick={() => setIsMicOn(!isMicOn)}
-                className={`p-3 rounded-full transition shadow-md ${
-                  isMicOn ? 'bg-stone-800 text-stone-100 hover:bg-stone-700' : 'bg-rose-600 text-white'
-                }`}
-                title={isMicOn ? "Mute Microphone" : "Unmute Microphone"}
-              >
-                {isMicOn ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
-              </button>
+            {session.meetingLink ? (
+              <>
+                <div>
+                  <h4 className="text-sm font-bold text-white">Ready to join</h4>
+                  <p className="text-xs text-stone-400 max-w-sm">
+                    This session has a real Google Meet link. In-app video isn't available yet —
+                    join through Google Meet in a new tab.
+                  </p>
+                </div>
+                <a
+                  href={session.meetingLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-6 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm flex items-center gap-2 transition shadow-lg shadow-emerald-950/30"
+                >
+                  <Video className="w-4 h-4" /> Join Google Meet <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              </>
+            ) : (
+              <>
+                <div>
+                  <h4 className="text-sm font-bold text-white">No meeting link yet</h4>
+                  <p className="text-xs text-stone-400 max-w-sm">
+                    Generate a real Google Meet link for this session using your connected Google
+                    Workspace account.
+                  </p>
+                </div>
+                <button
+                  onClick={handleGenerateMeetLink}
+                  disabled={isGeneratingMeetLink}
+                  className="px-6 py-3 rounded-2xl bg-amber-600 hover:bg-amber-500 disabled:opacity-60 text-white font-bold text-sm flex items-center gap-2 transition shadow-lg shadow-amber-950/30"
+                >
+                  {isGeneratingMeetLink ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Video className="w-4 h-4" />
+                  )}
+                  Generate Google Meet Link
+                </button>
+                {meetLinkError && (
+                  <div className="flex items-center gap-2 text-xs text-rose-300 bg-rose-950/40 border border-rose-900/50 rounded-xl px-3 py-2 max-w-sm">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{meetLinkError}</span>
+                  </div>
+                )}
+              </>
+            )}
 
-              <button
-                onClick={() => setIsVideoOn(!isVideoOn)}
-                className={`p-3 rounded-full transition shadow-md ${
-                  isVideoOn ? 'bg-stone-800 text-stone-100 hover:bg-stone-700' : 'bg-rose-600 text-white'
-                }`}
-                title={isVideoOn ? "Turn Camera Off" : "Turn Camera On"}
-              >
-                {isVideoOn ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
-              </button>
-
-              <a
-                href="https://meet.google.com/new"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-4 py-3 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs flex items-center gap-1.5 transition shadow-md"
-                title="Switch or Open in Google Meet"
-              >
-                <Video className="w-4 h-4" /> Google Meet <ExternalLink className="w-3 h-3" />
-              </a>
-
+            <div className="pt-4">
               <button
                 onClick={handleEndCall}
                 className="px-5 py-3 rounded-full bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs flex items-center gap-2 transition shadow-lg shadow-rose-950/40"
@@ -180,7 +151,7 @@ export const LiveSessionCallModal: React.FC<LiveSessionCallModalProps> = ({
 
           {/* Right: Collaborative Study Pad & Action Checklist (5 cols) */}
           <div className="lg:col-span-5 bg-stone-900 border-l border-stone-800 flex flex-col">
-            
+
             {/* Tab navigation */}
             <div className="flex border-b border-stone-800 bg-stone-950/40 text-xs">
               <button
@@ -220,7 +191,7 @@ export const LiveSessionCallModal: React.FC<LiveSessionCallModalProps> = ({
               {activeTab === 'NOTES' && (
                 <div className="h-full flex flex-col space-y-2">
                   <label className="text-xs font-bold uppercase tracking-wider text-stone-400 flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-400" /> Real-time Discipleship Notes
+                    <Sparkles className="w-3.5 h-3.5 text-amber-400" /> Discipleship Notes
                   </label>
                   <textarea
                     value={notes}
@@ -230,7 +201,7 @@ export const LiveSessionCallModal: React.FC<LiveSessionCallModalProps> = ({
                     placeholder="Type key insights, mentor advice, and revelation from the Word..."
                   />
                   <p className="text-[11px] text-stone-500 italic">
-                    All notes are encrypted and automatically synced to both of your profiles.
+                    Saved to this session when you end the call.
                   </p>
                 </div>
               )}

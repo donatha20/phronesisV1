@@ -277,7 +277,16 @@ export function useSessionMutations() {
     onSuccess: invalidate,
   });
 
-  return { create, complete, cancel };
+  /** Mints a real Google Meet link via the caller's connected Google
+   * Workspace and persists it to the session. Throws `ApiError(409)` with
+   * `data.code === 'not_connected'` if the caller hasn't connected one. */
+  const generateMeetLink = useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<SessionDTO>(`/api/sessions/${id}/generate-meet-link/`, { method: 'POST' }),
+    onSuccess: invalidate,
+  });
+
+  return { create, complete, cancel, generateMeetLink };
 }
 
 // ---- Media / episodes -------------------------------------------------

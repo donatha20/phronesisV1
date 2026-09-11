@@ -131,7 +131,10 @@ const AuthedApp: React.FC = () => {
   // Modals & Floating Players
   const [activeAudio, setActiveAudio] = useState<{ title: string; speaker: string; duration: number; url?: string } | null>(null);
   const [activeVideoModal, setActiveVideoModal] = useState<PodcastEpisode | null>(null);
-  const [activeLiveCallSession, setActiveLiveCallSession] = useState<DiscipleshipSession | null>(null);
+  const [activeLiveCallSessionId, setActiveLiveCallSessionId] = useState<string | null>(null);
+  // Derived (not a snapshot) so a freshly generated Meet link shows up
+  // immediately once the mutation invalidates the sessions query.
+  const activeLiveCallSession = sessions.find((s) => s.id === activeLiveCallSessionId) ?? null;
   const [isSpiritualAssistantOpen, setIsSpiritualAssistantOpen] = useState(false);
 
   const handlePlayAudioPodcast = (pod: PodcastEpisode) => {
@@ -167,7 +170,7 @@ const AuthedApp: React.FC = () => {
             prayers={prayers}
             pairedMentor={pairedMentor}
             onNavigate={(tab) => setActiveTab(tab)}
-            onOpenSessionCall={(s) => setActiveLiveCallSession(s)}
+            onOpenSessionCall={(s) => setActiveLiveCallSessionId(s.id)}
             onOpenVideoModal={(p) => setActiveVideoModal(p)}
             onPlayAudioDevotion={(dev) => setActiveAudio({
               title: dev.title, speaker: dev.authorName,
@@ -225,7 +228,7 @@ const AuthedApp: React.FC = () => {
             sessions={sessions}
             currentUser={currentUser}
             pairedMentor={pairedMentor}
-            onOpenSessionCall={(s) => setActiveLiveCallSession(s)}
+            onOpenSessionCall={(s) => setActiveLiveCallSessionId(s.id)}
             onScheduleSession={(input) => sessionMutations.create.mutate({
               menteeId: apiUser.role_base_kind === 'mentor' ? input.mentorId : apiUser.id,
               mentorId: apiUser.role_base_kind === 'mentor' ? apiUser.id : input.mentorId,
@@ -382,10 +385,12 @@ const AuthedApp: React.FC = () => {
 
       <LiveSessionCallModal
         session={activeLiveCallSession}
-        onClose={() => setActiveLiveCallSession(null)}
+        onClose={() => setActiveLiveCallSessionId(null)}
         onCompleteSession={(sessionId, notes, actionItems) =>
           sessionMutations.complete.mutate({ id: sessionId, notes, actionItems })
         }
+        onGenerateMeetLink={(sessionId) => sessionMutations.generateMeetLink.mutateAsync(sessionId).then(() => {})}
+        isGeneratingMeetLink={sessionMutations.generateMeetLink.isPending}
       />
 
       <SpiritualAssistantModal
