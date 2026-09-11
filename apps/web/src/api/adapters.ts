@@ -139,6 +139,9 @@ export interface CreateEpisodeInput {
   keyTakeaways: string[];
   videoEmbedUrl?: string;
   coverImageTheme?: string;
+  /** The actual audio/video file to upload (phase P6); omitted when the
+   * episode only links out via `videoEmbedUrl`. */
+  file?: File;
 }
 
 /** Reverse-adapt the legacy PodcastEpisode object the view builds locally
@@ -192,6 +195,8 @@ export interface CreateResourceInput {
   accessTier: string;
   syllabusChapters: string[];
   keyScriptureAnchors: string[];
+  /** The actual file to upload (phase P6); omitted when only `externalUrl` is set. */
+  file?: File;
 }
 
 export function resourceToCreateInput(res: ResourceItem): CreateResourceInput {

@@ -12,8 +12,16 @@ interface ResourceLibraryViewProps {
   currentUser: UserProfile;
   enrolledResourceIds: string[];
   onToggleBookmark: (id: string) => void;
-  onAddNewResource: (newRes: ResourceItem) => void;
+  onAddNewResource: (newRes: ResourceItem, file?: File) => void;
   onEnrollResource: (resourceId: string) => void;
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
 export const ResourceLibraryView: React.FC<ResourceLibraryViewProps> = ({
@@ -50,6 +58,7 @@ export const ResourceLibraryView: React.FC<ResourceLibraryViewProps> = ({
     'Module 2: Practical Spiritual Habits & Secret Place',
     'Module 3: Overcoming Impediments & Accountability'
   ]);
+  const [newFile, setNewFile] = useState<File | null>(null);
 
   const handleAddChapter = () => {
     if (!newChapterInput.trim()) return;
@@ -76,7 +85,7 @@ export const ResourceLibraryView: React.FC<ResourceLibraryViewProps> = ({
       isBookmarked: false,
       rating: 5.0,
       accessTier: newAccessTier,
-      fileSize: '4.2 MB',
+      fileSize: newFile ? formatFileSize(newFile.size) : 'External link',
       enrolledUsersCount: 1,
       uploadedBy: `${currentUser.name} (${currentUser.role === 'MENTOR_ELDER' ? 'Elder' : 'Curriculum Lead'})`,
       uploadDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
@@ -87,13 +96,14 @@ export const ResourceLibraryView: React.FC<ResourceLibraryViewProps> = ({
     // The uploader is auto-enrolled server-side once the resource is created
     // (see App.tsx's onAddNewResource) — the id here is client-local and not
     // the real server id, so we don't call onEnrollResource with it.
-    onAddNewResource(createdResource);
+    onAddNewResource(createdResource, newFile ?? undefined);
     setIsUploadModalOpen(false);
 
     // Reset fields
     setNewTitle('');
     setNewDescription('');
     setNewReadTime('30 pages (PDF)');
+    setNewFile(null);
   };
 
   const handleCopyInviteLink = (resId: string, title: string) => {
@@ -564,6 +574,21 @@ export const ResourceLibraryView: React.FC<ResourceLibraryViewProps> = ({
                   onChange={(e) => setNewDescription(e.target.value)}
                   className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3 text-stone-900 focus:outline-none focus:border-amber-600"
                 />
+              </div>
+
+              {/* File Upload */}
+              <div className="space-y-1.5">
+                <label className="font-bold text-stone-700 block">Attach File (PDF, DOCX, audio...)</label>
+                <input
+                  type="file"
+                  onChange={(e) => setNewFile(e.target.files?.[0] ?? null)}
+                  className="w-full text-stone-700 file:mr-3 file:py-2 file:px-3.5 file:rounded-xl file:border-0 file:bg-amber-600 file:text-white file:font-bold file:text-xs hover:file:bg-amber-500 bg-stone-50 border border-stone-200 rounded-xl"
+                />
+                {newFile && (
+                  <p className="text-[11px] text-stone-500">
+                    {newFile.name} • {formatFileSize(newFile.size)}
+                  </p>
+                )}
               </div>
 
               {/* Scripture Anchors & Study Length */}

@@ -14,6 +14,7 @@ import {
   SPHERE_TO_API, GOAL_STATUS_TO_API, PRAYER_PRIVACY_TO_API, SESSION_PLATFORM_TO_API,
   MEDIA_TYPE_TO_API, RESOURCE_TYPE_TO_API, ACCESS_TIER_TO_API,
 } from './enums';
+import { uploadFileDirect, DirectUploadNotSupported } from './directUpload';
 
 const list = <T>(path: string) => apiFetch<Paginated<T>>(path).then((r) => r.results ?? (r as unknown as T[]));
 
@@ -281,24 +282,42 @@ export function useEpisodeMutations() {
   const invalidate = () => qc.invalidateQueries({ queryKey: qk.episodes });
 
   const create = useMutation({
-    mutationFn: (input: CreateEpisodeInput) =>
-      apiFetch<EpisodeDTO>('/api/episodes/', {
-        method: 'POST',
-        json: {
-          title: input.title,
-          series: input.series,
-          speaker: input.speaker,
-          speaker_role: input.speakerRole,
-          media_type: MEDIA_TYPE_TO_API[input.mediaType] ?? 'audio',
-          duration_seconds: input.durationSeconds,
-          sphere: SPHERE_TO_API[input.sphere] ?? 'personal_growth',
-          description: input.description,
-          key_scriptures: input.keyScriptures,
-          key_takeaways: input.keyTakeaways,
-          video_embed_url: input.videoEmbedUrl ?? '',
-          cover_image_theme: input.coverImageTheme ?? '',
-        },
-      }),
+    mutationFn: async (input: CreateEpisodeInput) => {
+      const fields = {
+        title: input.title,
+        series: input.series,
+        speaker: input.speaker,
+        speaker_role: input.speakerRole,
+        media_type: MEDIA_TYPE_TO_API[input.mediaType] ?? 'audio',
+        duration_seconds: input.durationSeconds,
+        sphere: SPHERE_TO_API[input.sphere] ?? 'personal_growth',
+        description: input.description,
+        key_scriptures: input.keyScriptures,
+        key_takeaways: input.keyTakeaways,
+        video_embed_url: input.videoEmbedUrl ?? '',
+        cover_image_theme: input.coverImageTheme ?? '',
+      };
+
+      if (input.file) {
+        try {
+          const media_file_key = await uploadFileDirect(input.file, '/api/episodes/presign-upload/');
+          return apiFetch<EpisodeDTO>('/api/episodes/', {
+            method: 'POST',
+            json: { ...fields, media_file_key },
+          });
+        } catch (err) {
+          if (!(err instanceof DirectUploadNotSupported)) throw err;
+          const form = new FormData();
+          Object.entries(fields).forEach(([key, value]) =>
+            form.append(key, Array.isArray(value) ? JSON.stringify(value) : String(value)),
+          );
+          form.append('media_file', input.file);
+          return apiFetch<EpisodeDTO>('/api/episodes/', { method: 'POST', rawBody: form });
+        }
+      }
+
+      return apiFetch<EpisodeDTO>('/api/episodes/', { method: 'POST', json: fields });
+    },
     onSuccess: invalidate,
   });
 
@@ -330,21 +349,39 @@ export function useResourceMutations() {
   const invalidate = () => qc.invalidateQueries({ queryKey: qk.resources });
 
   const create = useMutation({
-    mutationFn: (input: CreateResourceInput) =>
-      apiFetch<ResourceDTO>('/api/resources/', {
-        method: 'POST',
-        json: {
-          title: input.title,
-          author: input.author,
-          type: RESOURCE_TYPE_TO_API[input.type] ?? 'pdf_guide',
-          sphere: SPHERE_TO_API[input.sphere] ?? 'personal_growth',
-          description: input.description,
-          read_time: input.readTime,
-          access_tier: ACCESS_TIER_TO_API[input.accessTier] ?? 'open_public',
-          syllabus_chapters: input.syllabusChapters,
-          key_scripture_anchors: input.keyScriptureAnchors,
-        },
-      }),
+    mutationFn: async (input: CreateResourceInput) => {
+      const fields = {
+        title: input.title,
+        author: input.author,
+        type: RESOURCE_TYPE_TO_API[input.type] ?? 'pdf_guide',
+        sphere: SPHERE_TO_API[input.sphere] ?? 'personal_growth',
+        description: input.description,
+        read_time: input.readTime,
+        access_tier: ACCESS_TIER_TO_API[input.accessTier] ?? 'open_public',
+        syllabus_chapters: input.syllabusChapters,
+        key_scripture_anchors: input.keyScriptureAnchors,
+      };
+
+      if (input.file) {
+        try {
+          const file_key = await uploadFileDirect(input.file, '/api/resources/presign-upload/');
+          return apiFetch<ResourceDTO>('/api/resources/', {
+            method: 'POST',
+            json: { ...fields, file_key },
+          });
+        } catch (err) {
+          if (!(err instanceof DirectUploadNotSupported)) throw err;
+          const form = new FormData();
+          Object.entries(fields).forEach(([key, value]) =>
+            form.append(key, Array.isArray(value) ? JSON.stringify(value) : String(value)),
+          );
+          form.append('file', input.file);
+          return apiFetch<ResourceDTO>('/api/resources/', { method: 'POST', rawBody: form });
+        }
+      }
+
+      return apiFetch<ResourceDTO>('/api/resources/', { method: 'POST', json: fields });
+    },
     onSuccess: invalidate,
   });
 

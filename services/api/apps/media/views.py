@@ -8,6 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.common.permissions import ReadOnlyOrMentor, is_admin
+from apps.common.storage import DirectUploadNotSupported, generate_presigned_post
 from apps.common.viewsets import AuditedModelViewSet
 
 from .models import EpisodeLike, EpisodeSave, PodcastEpisode
@@ -75,3 +76,20 @@ class PodcastEpisodeViewSet(AuditedModelViewSet):
         else:
             EpisodeSave.objects.filter(episode=episode, user=request.user).delete()
         return Response(self.get_serializer(self.get_queryset().get(pk=episode.pk)).data)
+
+    @action(detail=False, methods=["post"], url_path="presign-upload")
+    def presign_upload(self, request):  # type: ignore[no-untyped-def]
+        """`POST /api/episodes/presign-upload/` `{filename, contentType}` ->
+        a presigned S3 POST for the browser to upload audio/video directly,
+        plus the `key` to send back as `media_file_key` on create/update."""
+        filename = request.data.get("filename", "").strip()
+        content_type = request.data.get("contentType", "application/octet-stream")
+        if not filename:
+            return Response({"detail": "filename is required"}, status=400)
+        try:
+            result = generate_presigned_post(
+                key_prefix="media/episodes/uploads", filename=filename, content_type=content_type
+            )
+        except DirectUploadNotSupported as exc:
+            return Response({"code": "direct_upload_not_supported", "detail": str(exc)}, status=501)
+        return Response(result)

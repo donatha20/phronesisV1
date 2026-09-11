@@ -201,7 +201,7 @@ const AuthedApp: React.FC = () => {
             podcasts={podcasts}
             onOpenVideoModal={(p) => setActiveVideoModal(p)}
             onPlayAudioPodcast={handlePlayAudioPodcast}
-            onAddNewPodcast={(np) => episodeMutations.create.mutate(episodeToCreateInput(np))}
+            onAddNewPodcast={(np, file) => episodeMutations.create.mutate({ ...episodeToCreateInput(np), file })}
             onToggleSave={(id) => {
               const p = podcasts.find(x => x.id === id);
               episodeMutations.toggleSave.mutate({ id, saved: p?.isSaved ?? false });
@@ -299,9 +299,10 @@ const AuthedApp: React.FC = () => {
               const r = resources.find(x => x.id === id);
               resourceMutations.toggleBookmark.mutate({ id, bookmarked: r?.isBookmarked ?? false });
             }}
-            onAddNewResource={(res) => resourceMutations.create.mutate(resourceToCreateInput(res), {
-              onSuccess: (dto) => resourceMutations.enroll.mutate(dto.id),
-            })}
+            onAddNewResource={(res, file) => resourceMutations.create.mutate(
+              { ...resourceToCreateInput(res), file },
+              { onSuccess: (dto) => resourceMutations.enroll.mutate(dto.id) },
+            )}
             onEnrollResource={(id) => resourceMutations.enroll.mutate(id)}
           />
         )}

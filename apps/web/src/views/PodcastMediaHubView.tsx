@@ -9,7 +9,7 @@ interface PodcastMediaHubViewProps {
   podcasts: PodcastEpisode[];
   onOpenVideoModal: (episode: PodcastEpisode) => void;
   onPlayAudioPodcast: (episode: PodcastEpisode) => void;
-  onAddNewPodcast: (episode: PodcastEpisode) => void;
+  onAddNewPodcast: (episode: PodcastEpisode, file?: File) => void;
   onToggleSave: (id: string) => void;
   onToggleLike: (id: string) => void;
 }
@@ -36,6 +36,7 @@ export const PodcastMediaHubView: React.FC<PodcastMediaHubViewProps> = ({
   const [sphere, setSphere] = useState<LifeSphere>('PERSONAL_GROWTH');
   const [description, setDescription] = useState('');
   const [scripturesText, setScripturesText] = useState('Proverbs 3:5-6, Romans 12:1-2');
+  const [mediaFile, setMediaFile] = useState<File | null>(null);
 
   const filtered = podcasts.filter(p => {
     const matchesType = filterType === 'ALL' || p.mediaType === filterType;
@@ -44,6 +45,12 @@ export const PodcastMediaHubView: React.FC<PodcastMediaHubViewProps> = ({
                           p.description.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesType && matchesSearch;
   });
+
+  const parseDurationToSeconds = (value: string): number => {
+    const parts = value.split(':').map((p) => parseInt(p, 10)).filter((n) => !isNaN(n));
+    if (parts.length === 0) return 1800;
+    return parts.reduce((acc, n) => acc * 60 + n, 0);
+  };
 
   const handleUploadPodcast = (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,7 +64,7 @@ export const PodcastMediaHubView: React.FC<PodcastMediaHubViewProps> = ({
       speakerRole: speakerRole.trim(),
       mediaType,
       durationString: duration || '30:00',
-      durationSeconds: 1800,
+      durationSeconds: parseDurationToSeconds(duration || '30:00'),
       releaseDate: 'Today • Just now',
       sphere,
       description: description.trim(),
@@ -74,12 +81,13 @@ export const PodcastMediaHubView: React.FC<PodcastMediaHubViewProps> = ({
       coverImageTheme: 'from-amber-800 to-stone-950'
     };
 
-    onAddNewPodcast(newEpisode);
+    onAddNewPodcast(newEpisode, mediaFile ?? undefined);
     setIsUploadModalOpen(false);
 
     // Reset
     setTitle('');
     setDescription('');
+    setMediaFile(null);
   };
 
   return (
@@ -297,6 +305,21 @@ export const PodcastMediaHubView: React.FC<PodcastMediaHubViewProps> = ({
                     className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3.5 py-2 text-xs text-stone-900 focus:outline-none focus:border-amber-600"
                   />
                 </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-stone-700 uppercase tracking-wider">
+                  {mediaType === 'VIDEO' ? 'Video File' : 'Audio File'}
+                </label>
+                <input
+                  type="file"
+                  accept={mediaType === 'VIDEO' ? 'video/*' : 'audio/*'}
+                  onChange={(e) => setMediaFile(e.target.files?.[0] ?? null)}
+                  className="w-full text-stone-700 file:mr-3 file:py-2 file:px-3.5 file:rounded-xl file:border-0 file:bg-amber-600 file:text-white file:font-bold file:text-xs hover:file:bg-amber-500 bg-stone-50 border border-stone-200 rounded-xl"
+                />
+                {mediaFile && (
+                  <p className="text-[11px] text-stone-500">{mediaFile.name}</p>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

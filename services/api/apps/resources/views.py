@@ -8,6 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.common.permissions import ReadOnlyOrMentor, is_admin, is_mentor
+from apps.common.storage import DirectUploadNotSupported, generate_presigned_post
 from apps.common.viewsets import AuditedModelViewSet
 
 from .models import Resource, ResourceAccessTier, ResourceBookmark, ResourceEnrollment
@@ -70,3 +71,20 @@ class ResourceViewSet(AuditedModelViewSet):
         resource = self.get_object()
         ResourceEnrollment.objects.get_or_create(resource=resource, user=request.user)
         return Response(self.get_serializer(self.get_queryset().get(pk=resource.pk)).data)
+
+    @action(detail=False, methods=["post"], url_path="presign-upload")
+    def presign_upload(self, request):  # type: ignore[no-untyped-def]
+        """`POST /api/resources/presign-upload/` `{filename, contentType}` ->
+        a presigned S3 POST for the browser to upload directly, plus the
+        `key` to send back as `file_key` when creating/updating the resource."""
+        filename = request.data.get("filename", "").strip()
+        content_type = request.data.get("contentType", "application/octet-stream")
+        if not filename:
+            return Response({"detail": "filename is required"}, status=400)
+        try:
+            result = generate_presigned_post(
+                key_prefix="resources/uploads", filename=filename, content_type=content_type
+            )
+        except DirectUploadNotSupported as exc:
+            return Response({"code": "direct_upload_not_supported", "detail": str(exc)}, status=501)
+        return Response(result)
