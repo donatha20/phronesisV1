@@ -1,3 +1,10 @@
+/**
+ * Google Drive access, brokered server-side (phase P5). Every call here hits
+ * our Django API, which holds the encrypted refresh token and talks to
+ * Google on the user's behalf — the browser never sees a Google access token.
+ */
+import { apiFetch } from '../lib/api';
+
 export interface GoogleDriveFile {
   id: string;
   name: string;
@@ -20,200 +27,59 @@ export interface DriveFileListResponse {
   nextPageToken?: string;
 }
 
-/**
- * List files from user's Google Drive with optional query filters
- */
-export async function listGoogleDriveFiles(
-  accessToken: string,
-  options?: {
-    folderId?: string;
-    searchQuery?: string;
-    mimeTypeFilter?: 'ALL' | 'DOCS' | 'PDFS' | 'SHEETS' | 'SLIDES' | 'FOLDERS' | 'AUDIO';
-    pageSize?: number;
-    pageToken?: string;
-  }
-): Promise<DriveFileListResponse> {
-  const pageSize = options?.pageSize || 40;
-  const qParts: string[] = ['trashed = false'];
+/** List files from the connected user's Google Drive with optional filters. */
+export async function listGoogleDriveFiles(options?: {
+  folderId?: string;
+  searchQuery?: string;
+  mimeTypeFilter?: 'ALL' | 'DOCS' | 'PDFS' | 'SHEETS' | 'SLIDES' | 'FOLDERS' | 'AUDIO';
+  pageSize?: number;
+  pageToken?: string;
+}): Promise<DriveFileListResponse> {
+  const params = new URLSearchParams();
+  if (options?.folderId) params.set('folderId', options.folderId);
+  if (options?.searchQuery?.trim()) params.set('search', options.searchQuery.trim());
+  if (options?.mimeTypeFilter) params.set('mimeType', options.mimeTypeFilter);
+  if (options?.pageSize) params.set('pageSize', String(options.pageSize));
+  if (options?.pageToken) params.set('pageToken', options.pageToken);
 
-  if (options?.folderId) {
-    qParts.push(`'${options.folderId}' in parents`);
-  }
-
-  if (options?.searchQuery && options.searchQuery.trim()) {
-    const sanitized = options.searchQuery.replace(/'/g, "\\'");
-    qParts.push(`(name contains '${sanitized}' or fullText contains '${sanitized}')`);
-  }
-
-  if (options?.mimeTypeFilter && options.mimeTypeFilter !== 'ALL') {
-    switch (options.mimeTypeFilter) {
-      case 'FOLDERS':
-        qParts.push("mimeType = 'application/vnd.google-apps.folder'");
-        break;
-      case 'PDFS':
-        qParts.push("mimeType = 'application/pdf'");
-        break;
-      case 'DOCS':
-        qParts.push("(mimeType = 'application/vnd.google-apps.document' or mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' or mimeType = 'text/plain')");
-        break;
-      case 'SHEETS':
-        qParts.push("(mimeType = 'application/vnd.google-apps.spreadsheet' or mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' or mimeType = 'text/csv')");
-        break;
-      case 'SLIDES':
-        qParts.push("(mimeType = 'application/vnd.google-apps.presentation' or mimeType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation')");
-        break;
-      case 'AUDIO':
-        qParts.push("(mimeType = 'application/vnd.google-apps.audio' or mimeType contains 'audio/')");
-        break;
-    }
-  }
-
-  const query = encodeURIComponent(qParts.join(' and '));
-  const fields = encodeURIComponent('nextPageToken,files(id,name,mimeType,description,webViewLink,webContentLink,iconLink,thumbnailLink,createdTime,modifiedTime,size,shared,owners,parents)');
-  
-  let url = `https://www.googleapis.com/drive/v3/files?pageSize=${pageSize}&fields=${fields}&q=${query}&orderBy=folder,modifiedTime desc`;
-  if (options?.pageToken) {
-    url += `&pageToken=${encodeURIComponent(options.pageToken)}`;
-  }
-
-  const res = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json'
-    }
-  });
-
-  if (!res.ok) {
-    const errBody = await res.text();
-    throw new Error(`Google Drive API error (${res.status}): ${errBody}`);
-  }
-
-  return res.json();
+  return apiFetch<DriveFileListResponse>(`/api/integrations/google/drive/files/?${params.toString()}`);
 }
 
-/**
- * Create a new folder in Google Drive
- */
+/** Create a new folder in Google Drive. */
 export async function createGoogleDriveFolder(
-  accessToken: string,
   folderName: string,
   parentFolderId?: string
 ): Promise<GoogleDriveFile> {
-  const metadata: Record<string, any> = {
-    name: folderName,
-    mimeType: 'application/vnd.google-apps.folder',
-    description: 'Phronesis Mentorship Discipleship Folder'
-  };
-
-  if (parentFolderId) {
-    metadata.parents = [parentFolderId];
-  }
-
-  const res = await fetch('https://www.googleapis.com/drive/v3/files?fields=id,name,mimeType,webViewLink,createdTime', {
+  return apiFetch<GoogleDriveFile>('/api/integrations/google/drive/folders/', {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(metadata)
+    json: { name: folderName, parentFolderId },
   });
-
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Failed to create folder in Google Drive: ${err}`);
-  }
-
-  return res.json();
 }
 
-/**
- * Upload text/document or file to Google Drive using multipart upload
- */
-export async function uploadToGoogleDrive(
-  accessToken: string,
-  data: {
-    fileName: string;
-    mimeType: string;
-    content: string | Blob;
-    parentFolderId?: string;
-    description?: string;
-  }
-): Promise<GoogleDriveFile> {
-  const metadata: Record<string, any> = {
-    name: data.fileName,
-    mimeType: data.mimeType,
-    description: data.description || 'Created via Phronesis Discipleship Platform'
-  };
-
-  if (data.parentFolderId) {
-    metadata.parents = [data.parentFolderId];
-  }
-
-  const boundary = '-------314159265358979323846';
-  const delimiter = `\r\n--${boundary}\r\n`;
-  const closeDelimiter = `\r\n--${boundary}--`;
-
-  let contentBody: string;
-  if (data.content instanceof Blob) {
-    contentBody = await data.content.text();
-  } else {
-    contentBody = data.content;
-  }
-
-  const multipartRequestBody =
-    delimiter +
-    'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
-    JSON.stringify(metadata) +
-    delimiter +
-    `Content-Type: ${data.mimeType}\r\n\r\n` +
-    contentBody +
-    closeDelimiter;
-
-  const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,webViewLink,size,createdTime', {
+/** Upload text content as a file to Google Drive. */
+export async function uploadToGoogleDrive(data: {
+  fileName: string;
+  mimeType: string;
+  content: string;
+  parentFolderId?: string;
+  description?: string;
+}): Promise<GoogleDriveFile> {
+  return apiFetch<GoogleDriveFile>('/api/integrations/google/drive/upload/', {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': `multipart/related; boundary=${boundary}`
-    },
-    body: multipartRequestBody
+    json: data,
   });
-
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Failed to upload to Google Drive: ${err}`);
-  }
-
-  return res.json();
 }
 
-/**
- * Delete a file or folder from Google Drive
- * (Note: Caller MUST display confirmation dialog before invoking this)
- */
-export async function deleteGoogleDriveFile(
-  accessToken: string,
-  fileId: string
-): Promise<boolean> {
-  const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
+/** Delete a file or folder from Google Drive. Caller MUST confirm first. */
+export async function deleteGoogleDriveFile(fileId: string): Promise<boolean> {
+  await apiFetch<void>(`/api/integrations/google/drive/files/?fileId=${encodeURIComponent(fileId)}`, {
     method: 'DELETE',
-    headers: {
-      Authorization: `Bearer ${accessToken}`
-    }
   });
-
-  if (!res.ok && res.status !== 204) {
-    const err = await res.text();
-    throw new Error(`Failed to delete Google Drive file: ${err}`);
-  }
-
   return true;
 }
 
-/**
- * Export Discipleship Session Notes to Google Drive
- */
+/** Export Discipleship Session Notes to Google Drive. */
 export async function exportSessionToDrive(
-  accessToken: string,
   session: {
     id: string;
     mentorName: string;
@@ -263,7 +129,7 @@ Exported from Phronesis Mentorship Platform on ${new Date().toLocaleString()}
 
   const fileName = `Discipleship_Notes_${session.menteeName.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.txt`;
 
-  return uploadToGoogleDrive(accessToken, {
+  return uploadToGoogleDrive({
     fileName,
     mimeType: 'text/plain',
     content,
@@ -272,11 +138,8 @@ Exported from Phronesis Mentorship Platform on ${new Date().toLocaleString()}
   });
 }
 
-/**
- * Export 5 Life Spheres Goals & Milestones Action Plan to Google Drive
- */
+/** Export 5 Life Spheres Goals & Milestones Action Plan to Google Drive. */
 export async function exportGoalsPlanToDrive(
-  accessToken: string,
   userName: string,
   goals: Array<{
     title: string;
@@ -320,7 +183,7 @@ Total Tracked Goals: ${goals.length}
 
   const fileName = `Growth_Plan_5Spheres_${userName.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.txt`;
 
-  return uploadToGoogleDrive(accessToken, {
+  return uploadToGoogleDrive({
     fileName,
     mimeType: 'text/plain',
     content,
@@ -329,9 +192,7 @@ Total Tracked Goals: ${goals.length}
   });
 }
 
-/**
- * Format bytes to readable size
- */
+/** Format bytes to a readable size. */
 export function formatBytes(bytes?: string | number): string {
   if (!bytes) return 'N/A';
   const num = typeof bytes === 'string' ? parseInt(bytes, 10) : bytes;

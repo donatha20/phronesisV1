@@ -6,19 +6,17 @@ import {
   ChevronRight, CalendarDays, Globe, Info, X
 } from 'lucide-react';
 import { UserProfile, DiscipleshipSession, LifeSphere } from '../types';
-import { 
-  signInWithGoogleDrive, 
-  googleLogout, 
-  getAccessToken, 
-  getCurrentGoogleUser,
-  initAuth 
+import {
+  getWorkspaceStatus,
+  connectGoogleWorkspace,
+  disconnectGoogleWorkspace,
 } from '../services/googleAuth';
-import { 
-  listGoogleCalendarEvents, 
-  createGoogleCalendarEvent, 
-  deleteGoogleCalendarEvent, 
-  getMeetLinkFromEvent, 
-  GoogleCalendarEvent 
+import {
+  listGoogleCalendarEvents,
+  createGoogleCalendarEvent,
+  deleteGoogleCalendarEvent,
+  getMeetLinkFromEvent,
+  GoogleCalendarEvent
 } from '../services/googleCalendarService';
 import { createGoogleMeetSpace, GoogleMeetSpace } from '../services/googleMeetService';
 
@@ -33,8 +31,8 @@ export const GoogleCalendarMeetView: React.FC<GoogleCalendarMeetViewProps> = ({
   sessions,
   onSchedulePlatformSession
 }) => {
-  const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [googleUser, setGoogleUser] = useState<any>(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const [googleUser, setGoogleUser] = useState<{ email: string } | null>(null);
   const [isLoadingAuth, setIsLoadingAuth] = useState(false);
   const [isFetchingEvents, setIsFetchingEvents] = useState(false);
   const [calendarEvents, setCalendarEvents] = useState<GoogleCalendarEvent[]>([]);
@@ -84,58 +82,38 @@ export const GoogleCalendarMeetView: React.FC<GoogleCalendarMeetViewProps> = ({
     setTimeout(() => setCopiedLink(null), 3000);
   };
 
-  // Auth Listener
+  // Check Google Workspace connection status on mount.
   useEffect(() => {
-    const unsubscribe = initAuth(
-      (user, token) => {
-        setGoogleUser(user);
-        setAccessToken(token);
-        fetchEvents(token);
-      },
-      () => {
-        getAccessToken().then(token => {
-          if (token) {
-            setAccessToken(token);
-            setGoogleUser(getCurrentGoogleUser());
-            fetchEvents(token);
-          }
-        });
-      }
-    );
-
-    return () => unsubscribe();
+    getWorkspaceStatus()
+      .then((status) => {
+        setIsConnected(status.connected);
+        if (status.connected) {
+          setGoogleUser({ email: status.google_account_email });
+          fetchEvents();
+        }
+      })
+      .catch(() => setIsConnected(false));
   }, []);
 
-  const handleGoogleSignIn = async () => {
+  const handleGoogleSignIn = () => {
     setIsLoadingAuth(true);
-    try {
-      const authResult = await signInWithGoogleDrive();
-      if (authResult) {
-        setAccessToken(authResult.accessToken);
-        setGoogleUser(authResult.user);
-        showToast(`Connected to Google Calendar & Meet as ${authResult.user.displayName || authResult.user.email}!`);
-        fetchEvents(authResult.accessToken);
-      }
-    } catch (err: any) {
-      console.error(err);
-      showToast(err.message || 'Failed to sign in with Google.', 'error');
-    } finally {
-      setIsLoadingAuth(false);
-    }
+    connectGoogleWorkspace(); // full-page redirect; component unmounts here
   };
 
   const handleGoogleSignOut = async () => {
-    await googleLogout();
-    setAccessToken(null);
+    try {
+      await disconnectGoogleWorkspace();
+    } catch (err: any) {
+      showToast(err.message || 'Failed to disconnect Google Workspace.', 'error');
+      return;
+    }
+    setIsConnected(false);
     setGoogleUser(null);
     setCalendarEvents([]);
-    showToast('Signed out of Google Workspace.');
+    showToast('Disconnected from Google Workspace.');
   };
 
-  const fetchEvents = async (token?: string) => {
-    const activeToken = token || accessToken;
-    if (!activeToken) return;
-
+  const fetchEvents = async () => {
     setIsFetchingEvents(true);
     try {
       const now = new Date();
@@ -156,14 +134,14 @@ export const GoogleCalendarMeetView: React.FC<GoogleCalendarMeetViewProps> = ({
         timeMin = past.toISOString();
       }
 
-      const res = await listGoogleCalendarEvents(activeToken, {
+      const events = await listGoogleCalendarEvents({
         timeMin,
         timeMax,
         searchQuery: searchQuery.trim() || undefined,
         maxResults: 50
       });
 
-      setCalendarEvents(res.items || []);
+      setCalendarEvents(events || []);
     } catch (err: any) {
       console.error(err);
       showToast('Error loading Google Calendar events: ' + err.message, 'error');
@@ -175,7 +153,7 @@ export const GoogleCalendarMeetView: React.FC<GoogleCalendarMeetViewProps> = ({
   // Create Discipleship Calendar Event with Google Meet
   const handleCreateEvent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!accessToken || !eventTitle.trim()) return;
+    if (!isConnected || !eventTitle.trim()) return;
 
     setIsSubmittingEvent(true);
     try {
@@ -203,7 +181,7 @@ Scheduled via Phronesis Mentorship Platform`;
         attendees.push({ email: mentorEmail.trim(), displayName: mentorName });
       }
 
-      const createdEvent = await createGoogleCalendarEvent(accessToken, {
+      const createdEvent = await createGoogleCalendarEvent({
         summary: `[Phronesis] ${eventTitle.trim()}`,
         description,
         startTime: startDateTime.toISOString(),
@@ -249,7 +227,7 @@ Scheduled via Phronesis Mentorship Platform`;
 
   // Sync Existing Platform Session to Google Calendar
   const handleSyncSessionToCalendar = async (session: DiscipleshipSession) => {
-    if (!accessToken) {
+    if (!isConnected) {
       showToast('Please sign in to Google Workspace first.', 'error');
       return;
     }
@@ -281,7 +259,7 @@ ${session.actionItems.map(a => `• ${a}`).join('\n')}
 =====================================================
 Synced from Phronesis Mentorship Platform`;
 
-      await createGoogleCalendarEvent(accessToken, {
+      await createGoogleCalendarEvent({
         summary: `[Phronesis Discipleship] ${session.topic}`,
         description,
         startTime: startTime.toISOString(),
@@ -301,39 +279,18 @@ Synced from Phronesis Mentorship Platform`;
 
   // Instant Google Meet Creation
   const handleCreateInstantMeet = async () => {
-    if (!accessToken) {
+    if (!isConnected) {
       showToast('Please sign in with Google first.', 'error');
       return;
     }
 
     setIsCreatingInstantMeet(true);
     try {
-      try {
-        const space = await createGoogleMeetSpace(accessToken);
-        setCreatedMeetSpace(space);
-        setIsInstantMeetModalOpen(true);
-        showToast('Google Meet Room created successfully!');
-      } catch (meetApiErr) {
-        // Direct fallthrough: If Meet REST API is not enabled on tenant, generate Google Calendar Instant Event with Meet
-        const now = new Date();
-        const end = new Date(now.getTime() + 60 * 60000);
-        const event = await createGoogleCalendarEvent(accessToken, {
-          summary: `Phronesis Live Discipleship Meet (${currentUser.name})`,
-          startTime: now.toISOString(),
-          endTime: end.toISOString(),
-          enableGoogleMeet: true
-        });
-
-        const meetUri = getMeetLinkFromEvent(event) || 'https://meet.google.com/new';
-        setCreatedMeetSpace({
-          name: 'Phronesis Discipleship Room',
-          meetingUri: meetUri,
-          meetingCode: meetUri.split('/').pop() || 'meet'
-        });
-        setIsInstantMeetModalOpen(true);
-        fetchEvents();
-        showToast('Google Meet Room created via Google Calendar integration!');
-      }
+      const space = await createGoogleMeetSpace();
+      setCreatedMeetSpace(space);
+      setIsInstantMeetModalOpen(true);
+      fetchEvents();
+      showToast('Google Meet Room created successfully!');
     } catch (err: any) {
       showToast(err.message || 'Failed to create Google Meet space.', 'error');
     } finally {
@@ -343,10 +300,10 @@ Synced from Phronesis Mentorship Platform`;
 
   // Confirm delete calendar event
   const handleConfirmDeleteEvent = async () => {
-    if (!accessToken || !eventToDelete) return;
+    if (!isConnected || !eventToDelete) return;
 
     try {
-      await deleteGoogleCalendarEvent(accessToken, eventToDelete.id);
+      await deleteGoogleCalendarEvent(eventToDelete.id);
       showToast(`Calendar event "${eventToDelete.summary}" was removed.`);
       setEventToDelete(null);
       fetchEvents();
@@ -391,24 +348,15 @@ Synced from Phronesis Mentorship Platform`;
 
         {/* Authentication Controls */}
         <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200 shrink-0 space-y-3 min-w-[280px]">
-          {accessToken && googleUser ? (
+          {isConnected && googleUser ? (
             <div className="space-y-3">
               <div className="flex items-center gap-3">
-                {googleUser.photoURL ? (
-                  <img 
-                    src={googleUser.photoURL} 
-                    alt={googleUser.displayName || 'Google Account'} 
-                    className="w-10 h-10 rounded-full border border-amber-500/40"
-                    referrerPolicy="no-referrer"
-                  />
-                ) : (
-                  <div className="w-10 h-10 rounded-full bg-amber-600 text-white flex items-center justify-center font-bold text-sm">
-                    {googleUser.displayName?.charAt(0) || 'G'}
-                  </div>
-                )}
+                <div className="w-10 h-10 rounded-full bg-amber-600 text-white flex items-center justify-center font-bold text-sm">
+                  {googleUser.email?.charAt(0).toUpperCase() || 'G'}
+                </div>
                 <div className="truncate">
                   <div className="font-bold text-xs text-stone-900 truncate">
-                    {googleUser.displayName || 'Connected Account'}
+                    Connected Account
                   </div>
                   <div className="text-[10px] text-stone-500 truncate">{googleUser.email}</div>
                   <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600 font-semibold mt-0.5">
@@ -598,7 +546,7 @@ Synced from Phronesis Mentorship Platform`;
         </div>
 
         {/* Calendar Events List */}
-        {!accessToken ? (
+        {!isConnected ? (
           <div className="text-center py-16 space-y-4 max-w-md mx-auto">
             <div className="w-16 h-16 rounded-3xl bg-amber-50 text-amber-800 mx-auto flex items-center justify-center">
               <CalendarIcon className="w-8 h-8 text-amber-600" />

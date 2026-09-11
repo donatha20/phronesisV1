@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { UserProfile, DiscipleshipSession, PodcastEpisode } from './types';
 import { initialMentees } from './data/sampleData';
@@ -66,6 +66,17 @@ const AuthedApp: React.FC = () => {
   const currentUser = useMemo(() => apiUserToProfile(apiUser), [apiUser]);
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('DASHBOARD');
+
+  // The Google Workspace connect/disconnect broker redirects back to `/`
+  // with `google_connected=1` or `google_error=<code>` — land on the Drive
+  // tab so the result is visible, then scrub the query string.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('google_connected') || params.has('google_error')) {
+      setActiveTab('GOOGLE_DRIVE');
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
 
   // ---- API-backed domains --------------------------------------------
   const goalsQuery = useGoals();

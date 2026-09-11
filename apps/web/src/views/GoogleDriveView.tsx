@@ -6,12 +6,10 @@ import {
   Layers, Video, Check, X, FileSpreadsheet, Presentation, Music
 } from 'lucide-react';
 import { UserProfile, DiscipleshipSession, GoalItem, ResourceItem, PrayerRequest } from '../types';
-import { 
-  signInWithGoogleDrive, 
-  googleLogout, 
-  getAccessToken, 
-  getCurrentGoogleUser,
-  initAuth 
+import {
+  getWorkspaceStatus,
+  connectGoogleWorkspace,
+  disconnectGoogleWorkspace,
 } from '../services/googleAuth';
 import { 
   listGoogleDriveFiles, 
@@ -39,8 +37,8 @@ export const GoogleDriveView: React.FC<GoogleDriveViewProps> = ({
   prayers,
   onImportResourceToLibrary
 }) => {
-  const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [googleUser, setGoogleUser] = useState<any>(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const [googleUser, setGoogleUser] = useState<{ email: string } | null>(null);
   const [isLoadingAuth, setIsLoadingAuth] = useState(false);
   const [isFetchingFiles, setIsFetchingFiles] = useState(false);
   const [files, setFiles] = useState<GoogleDriveFile[]>([]);
@@ -86,62 +84,42 @@ export const GoogleDriveView: React.FC<GoogleDriveViewProps> = ({
     setTimeout(() => setToastMessage(null), 5000);
   };
 
-  // Listen to Auth state
+  // Check Google Workspace connection status on mount (and after the OAuth
+  // redirect back from `/settings/integrations?connected=1`).
   useEffect(() => {
-    const unsubscribe = initAuth(
-      (user, token) => {
-        setGoogleUser(user);
-        setAccessToken(token);
-        fetchFiles(token);
-      },
-      () => {
-        // Fallback check in memory
-        getAccessToken().then(token => {
-          if (token) {
-            setAccessToken(token);
-            setGoogleUser(getCurrentGoogleUser());
-            fetchFiles(token);
-          }
-        });
-      }
-    );
-
-    return () => unsubscribe();
+    getWorkspaceStatus()
+      .then((status) => {
+        setIsConnected(status.connected);
+        if (status.connected) {
+          setGoogleUser({ email: status.google_account_email });
+          fetchFiles();
+        }
+      })
+      .catch(() => setIsConnected(false));
   }, []);
 
-  const handleGoogleSignIn = async () => {
+  const handleGoogleSignIn = () => {
     setIsLoadingAuth(true);
-    try {
-      const authResult = await signInWithGoogleDrive();
-      if (authResult) {
-        setAccessToken(authResult.accessToken);
-        setGoogleUser(authResult.user);
-        showToast(`Connected to Google Drive as ${authResult.user.displayName || authResult.user.email}!`);
-        fetchFiles(authResult.accessToken);
-      }
-    } catch (err: any) {
-      console.error(err);
-      showToast(err.message || 'Failed to sign in with Google.', 'error');
-    } finally {
-      setIsLoadingAuth(false);
-    }
+    connectGoogleWorkspace(); // full-page redirect; component unmounts here
   };
 
   const handleGoogleSignOut = async () => {
-    await googleLogout();
-    setAccessToken(null);
+    try {
+      await disconnectGoogleWorkspace();
+    } catch (err: any) {
+      showToast(err.message || 'Failed to disconnect Google Drive.', 'error');
+      return;
+    }
+    setIsConnected(false);
     setGoogleUser(null);
     setFiles([]);
-    showToast('Signed out of Google Drive.');
+    showToast('Disconnected from Google Drive.');
   };
 
-  const fetchFiles = async (token?: string, folderId?: string) => {
-    const activeToken = token || accessToken;
-    if (!activeToken) return;
-
+  const fetchFiles = async (folderId?: string) => {
     setIsFetchingFiles(true);
     try {
-      const response = await listGoogleDriveFiles(activeToken, {
+      const response = await listGoogleDriveFiles({
         folderId: folderId ?? currentFolderId,
         searchQuery,
         mimeTypeFilter: mimeFilter
@@ -158,7 +136,7 @@ export const GoogleDriveView: React.FC<GoogleDriveViewProps> = ({
   const handleNavigateToFolder = (folder: GoogleDriveFile) => {
     setCurrentFolderId(folder.id);
     setFolderBreadcrumbs(prev => [...prev, { id: folder.id, name: folder.name }]);
-    fetchFiles(accessToken || undefined, folder.id);
+    fetchFiles(folder.id);
   };
 
   const handleBreadcrumbClick = (index: number) => {
@@ -167,16 +145,16 @@ export const GoogleDriveView: React.FC<GoogleDriveViewProps> = ({
     setFolderBreadcrumbs(newBreadcrumbs);
     const newFolderId = target.id || undefined;
     setCurrentFolderId(newFolderId);
-    fetchFiles(accessToken || undefined, newFolderId);
+    fetchFiles(newFolderId);
   };
 
   const handleCreateFolder = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!accessToken || !newFolderName.trim()) return;
+    if (!isConnected || !newFolderName.trim()) return;
 
     setIsCreatingFolder(true);
     try {
-      await createGoogleDriveFolder(accessToken, newFolderName.trim(), currentFolderId);
+      await createGoogleDriveFolder(newFolderName.trim(), currentFolderId);
       setNewFolderName('');
       setIsCreateFolderModalOpen(false);
       showToast(`Folder "${newFolderName}" created successfully in Google Drive!`);
@@ -190,11 +168,11 @@ export const GoogleDriveView: React.FC<GoogleDriveViewProps> = ({
 
   const handleUploadFile = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!accessToken || !uploadFileName.trim()) return;
+    if (!isConnected || !uploadFileName.trim()) return;
 
     setIsUploading(true);
     try {
-      await uploadToGoogleDrive(accessToken, {
+      await uploadToGoogleDrive({
         fileName: uploadFileName.endsWith('.txt') ? uploadFileName : `${uploadFileName}.txt`,
         mimeType: uploadFileType,
         content: uploadFileContent,
@@ -216,10 +194,10 @@ export const GoogleDriveView: React.FC<GoogleDriveViewProps> = ({
   };
 
   const handleConfirmDeleteFile = async () => {
-    if (!accessToken || !fileToDelete) return;
+    if (!isConnected || !fileToDelete) return;
 
     try {
-      await deleteGoogleDriveFile(accessToken, fileToDelete.id);
+      await deleteGoogleDriveFile(fileToDelete.id);
       showToast(`"${fileToDelete.name}" was permanently removed from Google Drive.`);
       setFileToDelete(null);
       fetchFiles();
@@ -229,14 +207,14 @@ export const GoogleDriveView: React.FC<GoogleDriveViewProps> = ({
   };
 
   const handleExportSession = async (session: DiscipleshipSession) => {
-    if (!accessToken) {
+    if (!isConnected) {
       showToast('Please sign in to Google Drive first to export minutes.', 'error');
       return;
     }
 
     setIsExportingSession(session.id);
     try {
-      const exportedFile = await exportSessionToDrive(accessToken, session, currentFolderId);
+      await exportSessionToDrive(session, currentFolderId);
       showToast(`Session notes for "${session.topic}" saved to Google Drive!`);
       fetchFiles();
     } catch (err: any) {
@@ -247,14 +225,14 @@ export const GoogleDriveView: React.FC<GoogleDriveViewProps> = ({
   };
 
   const handleExportGrowthPlan = async () => {
-    if (!accessToken) {
+    if (!isConnected) {
       showToast('Please sign in to Google Drive first.', 'error');
       return;
     }
 
     setIsExportingPlan(true);
     try {
-      await exportGoalsPlanToDrive(accessToken, currentUser.name, goals, currentFolderId);
+      await exportGoalsPlanToDrive(currentUser.name, goals, currentFolderId);
       showToast(`5 Life Spheres discipleship action plan saved to Google Drive!`);
       fetchFiles();
     } catch (err: any) {
@@ -337,24 +315,15 @@ export const GoogleDriveView: React.FC<GoogleDriveViewProps> = ({
 
         {/* Authentication Controls */}
         <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200 shrink-0 space-y-3 min-w-[280px]">
-          {accessToken && googleUser ? (
+          {isConnected && googleUser ? (
             <div className="space-y-3">
               <div className="flex items-center gap-3">
-                {googleUser.photoURL ? (
-                  <img 
-                    src={googleUser.photoURL} 
-                    alt={googleUser.displayName || 'Google Account'} 
-                    className="w-10 h-10 rounded-full border border-amber-500/40"
-                    referrerPolicy="no-referrer"
-                  />
-                ) : (
-                  <div className="w-10 h-10 rounded-full bg-amber-600 text-white flex items-center justify-center font-bold text-sm">
-                    {googleUser.displayName?.charAt(0) || 'G'}
-                  </div>
-                )}
+                <div className="w-10 h-10 rounded-full bg-amber-600 text-white flex items-center justify-center font-bold text-sm">
+                  {googleUser.email?.charAt(0).toUpperCase() || 'G'}
+                </div>
                 <div className="truncate">
                   <div className="font-bold text-xs text-stone-900 truncate">
-                    {googleUser.displayName || 'Connected Account'}
+                    Connected Account
                   </div>
                   <div className="text-[10px] text-stone-500 truncate">{googleUser.email}</div>
                   <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600 font-semibold mt-0.5">
@@ -558,7 +527,7 @@ export const GoogleDriveView: React.FC<GoogleDriveViewProps> = ({
         </div>
 
         {/* File List / State View */}
-        {!accessToken ? (
+        {!isConnected ? (
           <div className="text-center py-16 space-y-4 max-w-md mx-auto">
             <div className="w-16 h-16 rounded-3xl bg-amber-50 text-amber-800 mx-auto flex items-center justify-center">
               <HardDrive className="w-8 h-8 text-amber-600" />

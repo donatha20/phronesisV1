@@ -14,6 +14,8 @@ api_patterns = [
     path("auth/registration/", include("dj_rest_auth.registration.urls")),
     # health
     path("healthz/", include("apps.common.urls")),
+    # Google Workspace broker (Drive/Calendar/Meet) — separate from login
+    path("integrations/", include("apps.integrations.urls")),
     # domain REST API
     path("", include("config.api_router")),
 ]

@@ -1,50 +1,31 @@
 /**
- * Google Workspace (Drive / Calendar / Meet) connection shim.
+ * Google Workspace (Drive / Calendar / Meet) connection status — phase P5.
  *
- * Firebase has been removed. Application sign-in now lives in `src/auth/`
- * (cookie-JWT against the Django API, plus "Login with Google" via a
- * server-side redirect).
- *
- * Workspace *data* access is a SEPARATE concern and is being moved server-side:
- * the Django backend will broker Drive/Calendar/Meet calls with a stored,
- * encrypted refresh token (migration phase P5, endpoints under
- * `/api/integrations/google/`). Until that lands, these functions report the
- * feature as unavailable so the Drive/Calendar views degrade gracefully
- * instead of calling Google directly from the browser.
+ * This is a SEPARATE concern from application sign-in (`src/auth/`). Workspace
+ * data access is brokered entirely server-side: the Django backend holds an
+ * encrypted refresh token and proxies Drive/Calendar/Meet calls under
+ * `/api/integrations/google/*`. The browser never sees a Google access token —
+ * "connecting" is a full-page redirect to `/api/integrations/google/authorize/`
+ * and back, exactly like "Login with Google".
  */
+import { apiFetch, API_BASE_URL } from '../lib/api';
 
-export interface GoogleWorkspaceUser {
-  email: string;
-  displayName?: string;
+export interface GoogleWorkspaceStatus {
+  connected: boolean;
+  google_account_email: string;
+  scopes: string[];
+  access_token_expiry: string | null;
 }
 
-const NOT_AVAILABLE_MESSAGE =
-  'Google Workspace access is being migrated to the Phronesis backend and will be available again shortly.';
+/** `GET /api/integrations/google/status/` */
+export const getWorkspaceStatus = (): Promise<GoogleWorkspaceStatus> =>
+  apiFetch<GoogleWorkspaceStatus>('/api/integrations/google/status/');
 
-/** No live browser-side session anymore. */
-export const getAccessToken = async (): Promise<string | null> => null;
-
-export const getCurrentGoogleUser = (): GoogleWorkspaceUser | null => null;
-
-/**
- * Previously subscribed to Firebase auth state. Now a no-op that immediately
- * signals "not connected" and returns an unsubscribe function.
- */
-export const initAuth = (
-  _onConnected?: (user: GoogleWorkspaceUser, token: string) => void,
-  onNotConnected?: () => void,
-): (() => void) => {
-  onNotConnected?.();
-  return () => {};
+/** Full-page redirect to Google's consent screen; returns to `/settings/integrations`. */
+export const connectGoogleWorkspace = (): void => {
+  window.location.href = `${API_BASE_URL}/api/integrations/google/authorize/`;
 };
 
-export const signInWithGoogleDrive = async (): Promise<{
-  user: GoogleWorkspaceUser;
-  accessToken: string;
-} | null> => {
-  throw new Error(NOT_AVAILABLE_MESSAGE);
-};
-
-export const googleLogout = async (): Promise<void> => {
-  /* nothing to tear down */
-};
+/** Revokes and deletes the stored refresh token. */
+export const disconnectGoogleWorkspace = (): Promise<void> =>
+  apiFetch<void>('/api/integrations/google/disconnect/', { method: 'POST' });
