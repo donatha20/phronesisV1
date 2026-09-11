@@ -1,27 +1,55 @@
-import React, { useState } from 'react';
-import { 
-  BookOpen, Sparkles, Heart, MessageSquare, Share2, 
-  Plus, Bookmark, Volume2, Send, Filter, CheckCircle2, ChevronRight 
+import React, { useEffect, useState } from 'react';
+import {
+  BookOpen, Sparkles, Heart, MessageSquare,
+  Plus, Volume2, Send, CheckCircle2, ChevronRight
 } from 'lucide-react';
 import { DailyDevotion, UserProfile, LifeSphere, DevotionComment } from '../types';
+
+export interface CreateDevotionInput {
+  title: string;
+  scriptureReference: string;
+  scriptureText: string;
+  reflectionBody: string;
+  prayerPoint: string;
+  practicalActionStep: string;
+  sphere: string;
+}
 
 interface DailyDevotionsViewProps {
   devotions: DailyDevotion[];
   currentUser: UserProfile;
+  comments: DevotionComment[];
+  onSelectDevotion: (id: string) => void;
   onPlayAudio: (devotion: DailyDevotion) => void;
-  onPostDevotion: (newDevotion: DailyDevotion) => void;
+  onCreateDevotion: (input: CreateDevotionInput) => void;
+  onAddComment: (devotionId: string, text: string) => void;
+  onToggleLike: (id: string, liked: boolean) => void;
 }
 
 export const DailyDevotionsView: React.FC<DailyDevotionsViewProps> = ({
   devotions,
   currentUser,
+  comments,
+  onSelectDevotion,
   onPlayAudio,
-  onPostDevotion
+  onCreateDevotion,
+  onAddComment,
+  onToggleLike
 }) => {
-  const [selectedDevotion, setSelectedDevotion] = useState<DailyDevotion>(devotions[0]);
+  const [selectedId, setSelectedId] = useState<string | null>(devotions[0]?.id ?? null);
+  const selectedDevotion = devotions.find(d => d.id === selectedId) ?? devotions[0] ?? null;
   const [activeSphereFilter, setActiveSphereFilter] = useState<string>('ALL');
   const [commentText, setCommentText] = useState('');
   const [isNewDevotionModalOpen, setIsNewDevotionModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (!selectedId && devotions[0]) setSelectedId(devotions[0].id);
+  }, [devotions, selectedId]);
+
+  useEffect(() => {
+    if (selectedDevotion) onSelectDevotion(selectedDevotion.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDevotion?.id]);
 
   // New devotion form state
   const [newTitle, setNewTitle] = useState('');
@@ -37,21 +65,8 @@ export const DailyDevotionsView: React.FC<DailyDevotionsViewProps> = ({
     : devotions.filter(d => d.categorySphere === activeSphereFilter);
 
   const handleAddComment = () => {
-    if (!commentText.trim()) return;
-    const newComment: DevotionComment = {
-      id: `c_${Date.now()}`,
-      authorName: currentUser.name,
-      authorRole: currentUser.role,
-      authorInitial: currentUser.avatarInitial,
-      text: commentText.trim(),
-      timestamp: 'Just now',
-      likes: 0
-    };
-    const updated = {
-      ...selectedDevotion,
-      comments: [...selectedDevotion.comments, newComment]
-    };
-    setSelectedDevotion(updated);
+    if (!commentText.trim() || !selectedDevotion) return;
+    onAddComment(selectedDevotion.id, commentText.trim());
     setCommentText('');
   };
 
@@ -59,31 +74,15 @@ export const DailyDevotionsView: React.FC<DailyDevotionsViewProps> = ({
     e.preventDefault();
     if (!newTitle.trim() || !newReflection.trim()) return;
 
-    const created: DailyDevotion = {
-      id: `dev_${Date.now()}`,
+    onCreateDevotion({
       title: newTitle.trim(),
-      date: 'Today • Just now',
-      theme: `${newSphere.replace('_', ' ')} Discipleship`,
-      authorName: currentUser.name,
-      authorRole: currentUser.role,
-      authorTitle: currentUser.title,
       scriptureReference: newScriptureRef || 'Proverbs 3:5-6',
       scriptureText: newScriptureText || '"Trust in the Lord with all your heart and lean not on your own understanding."',
       reflectionBody: newReflection.trim(),
       prayerPoint: newPrayer.trim() || 'Lord, help us apply this truth faithfully.',
       practicalActionStep: newActionStep.trim() || 'Pray through this scripture and share with a brother or sister.',
-      audioDurationSeconds: 180,
-      audioVoiceNoteUrl: 'https://actions.google.com/sounds/v1/ambiences/gentle_stream.ogg',
-      categorySphere: newSphere,
-      likesCount: 1,
-      isLikedByUser: true,
-      comments: [],
-      tags: ['Phronesis', newSphere, 'Wisdom'],
-      readTimeMinutes: 3
-    };
-
-    onPostDevotion(created);
-    setSelectedDevotion(created);
+      sphere: newSphere,
+    });
     setIsNewDevotionModalOpen(false);
 
     // Reset
@@ -94,6 +93,10 @@ export const DailyDevotionsView: React.FC<DailyDevotionsViewProps> = ({
     setNewPrayer('');
     setNewActionStep('');
   };
+
+  if (!selectedDevotion) {
+    return <div className="text-sm text-stone-500">No devotions yet.</div>;
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -153,7 +156,7 @@ export const DailyDevotionsView: React.FC<DailyDevotionsViewProps> = ({
               return (
                 <div
                   key={dev.id}
-                  onClick={() => setSelectedDevotion(dev)}
+                  onClick={() => setSelectedId(dev.id)}
                   className={`p-4 rounded-2xl border transition cursor-pointer space-y-2.5 ${
                     isSelected
                       ? 'bg-amber-50/50 border-amber-400 shadow-sm'
@@ -201,6 +204,17 @@ export const DailyDevotionsView: React.FC<DailyDevotionsViewProps> = ({
               </div>
 
               <div className="flex items-center gap-2">
+                <button
+                  onClick={() => onToggleLike(selectedDevotion.id, selectedDevotion.isLikedByUser)}
+                  className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
+                    selectedDevotion.isLikedByUser
+                      ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                      : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                  }`}
+                >
+                  <Heart className={`w-3.5 h-3.5 ${selectedDevotion.isLikedByUser ? 'fill-current text-rose-500' : ''}`} />
+                  <span>{selectedDevotion.likesCount}</span>
+                </button>
                 <button
                   onClick={() => onPlayAudio(selectedDevotion)}
                   className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-stone-900 hover:bg-stone-800 text-stone-100 text-xs font-bold transition shadow-sm"
@@ -265,12 +279,12 @@ export const DailyDevotionsView: React.FC<DailyDevotionsViewProps> = ({
           <div className="pt-6 border-t border-stone-200 space-y-4">
             <h3 className="text-base font-bold font-serif-display text-stone-900 flex items-center gap-2">
               <MessageSquare className="w-4 h-4 text-amber-600" />
-              <span>Mentee & Elder Reflections ({selectedDevotion.comments.length})</span>
+              <span>Mentee & Elder Reflections ({comments.length})</span>
             </h3>
 
             {/* Existing Comments */}
             <div className="space-y-3">
-              {selectedDevotion.comments.map((c) => (
+              {comments.map((c) => (
                 <div key={c.id} className="p-3.5 rounded-2xl bg-stone-50 border border-stone-200 space-y-1.5">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">

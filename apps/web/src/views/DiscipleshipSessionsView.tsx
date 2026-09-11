@@ -1,23 +1,33 @@
 import React, { useState } from 'react';
-import { 
-  Video, Calendar, Clock, BookOpen, Plus, CheckCircle2, 
-  MessageSquare, Sparkles, User, FileText, ChevronRight,
-  ExternalLink, CalendarDays
+import {
+  Video, Clock, BookOpen, Plus, CheckCircle2,
+  CalendarDays
 } from 'lucide-react';
 import { DiscipleshipSession, UserProfile, LifeSphere, SessionPlatform } from '../types';
-import { getAccessToken } from '../services/googleAuth';
-import { createGoogleCalendarEvent } from '../services/googleCalendarService';
+
+export interface CreateSessionInput {
+  mentorId: string;
+  mentorName: string;
+  topic: string;
+  sphereFocus: string;
+  scriptureText: string;
+  platform: string;
+  scheduledAt: string; // ISO
+  meetingNotes: string;
+}
 
 interface DiscipleshipSessionsViewProps {
   sessions: DiscipleshipSession[];
   currentUser: UserProfile;
+  pairedMentor: { id: string; name: string } | null;
   onOpenSessionCall: (session: DiscipleshipSession) => void;
-  onScheduleSession: (newSession: DiscipleshipSession) => void;
+  onScheduleSession: (input: CreateSessionInput) => void;
 }
 
 export const DiscipleshipSessionsView: React.FC<DiscipleshipSessionsViewProps> = ({
   sessions,
   currentUser,
+  pairedMentor,
   onOpenSessionCall,
   onScheduleSession
 }) => {
@@ -27,75 +37,36 @@ export const DiscipleshipSessionsView: React.FC<DiscipleshipSessionsViewProps> =
   // Form State
   const [topic, setTopic] = useState('');
   const [sphereFocus, setSphereFocus] = useState<LifeSphere>('PERSONAL_GROWTH');
-  const [mentorName, setMentorName] = useState('Elder Thomas Bradley');
   const [platform, setPlatform] = useState<SessionPlatform>('GOOGLE_MEET');
-  const [dateTime, setDateTime] = useState('Next Tuesday, 7:00 PM EST');
+  const [dateTimeLocal, setDateTimeLocal] = useState('');
   const [scriptureText, setScriptureText] = useState('Romans 12:1-2 - Living Sacrifices');
   const [initialNotes, setInitialNotes] = useState('');
-  const [syncToGCal, setSyncToGCal] = useState(true);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-
-  const showNotification = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 4000);
-  };
 
   const upcomingSessions = sessions.filter(s => s.status === 'SCHEDULED' || s.status === 'IN_PROGRESS');
   const pastSessions = sessions.filter(s => s.status === 'COMPLETED' || s.status === 'CANCELLED');
 
   const displayedSessions = activeTab === 'UPCOMING' ? upcomingSessions : pastSessions;
 
-  const handleCreateSchedule = async (e: React.FormEvent) => {
+  const handleCreateSchedule = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!topic.trim()) return;
+    if (!topic.trim() || !pairedMentor || !dateTimeLocal) return;
 
-    const newSess: DiscipleshipSession = {
-      id: `sess_${Date.now()}`,
-      menteeId: currentUser.id,
-      menteeName: currentUser.name,
-      mentorId: 'mentor_1',
-      mentorName,
-      scheduledTime: dateTime,
-      durationMinutes: 45,
-      sphereFocus,
+    onScheduleSession({
+      mentorId: pairedMentor.id,
+      mentorName: pairedMentor.name,
       topic: topic.trim(),
+      sphereFocus,
       scriptureText: scriptureText.trim() || 'Proverbs 3:5-6',
       platform,
-      status: 'SCHEDULED',
+      scheduledAt: new Date(dateTimeLocal).toISOString(),
       meetingNotes: initialNotes.trim() || 'Agenda: 1. Opening prayer. 2. Sphere goals check-in. 3. Scripture meditation.',
-      actionItems: ['Review weekly memory verse', 'Submit prayer request prior to next meeting'],
-      postSessionPrayer: 'Lord, bless this brother/sister in all wisdom and spiritual understanding.'
-    };
-
-    if (syncToGCal) {
-      try {
-        const token = await getAccessToken();
-        if (token) {
-          const startTime = new Date();
-          startTime.setDate(startTime.getDate() + 1);
-          startTime.setHours(19, 0, 0, 0);
-          const endTime = new Date(startTime.getTime() + 45 * 60000);
-
-          await createGoogleCalendarEvent(token, {
-            summary: `[Phronesis] ${topic.trim()}`,
-            description: `Elder: ${mentorName}\nDisciple: ${currentUser.name}\nSphere: ${sphereFocus}\nScripture: ${scriptureText}`,
-            startTime: startTime.toISOString(),
-            endTime: endTime.toISOString(),
-            enableGoogleMeet: platform === 'GOOGLE_MEET'
-          });
-          showNotification('Session synced with Google Calendar & Google Meet!');
-        }
-      } catch (err: any) {
-        console.warn('Could not auto-sync to GCal:', err);
-      }
-    }
-
-    onScheduleSession(newSess);
+    });
     setIsScheduleModalOpen(false);
 
     // Reset
     setTopic('');
     setInitialNotes('');
+    setDateTimeLocal('');
   };
 
   return (
@@ -118,12 +89,18 @@ export const DiscipleshipSessionsView: React.FC<DiscipleshipSessionsViewProps> =
           </p>
         </div>
 
-        <button
-          onClick={() => setIsScheduleModalOpen(true)}
-          className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold transition shadow-sm flex items-center gap-2 self-start sm:self-auto"
-        >
-          <Plus className="w-4 h-4" /> Book Discipleship Call
-        </button>
+        {pairedMentor ? (
+          <button
+            onClick={() => setIsScheduleModalOpen(true)}
+            className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold transition shadow-sm flex items-center gap-2 self-start sm:self-auto"
+          >
+            <Plus className="w-4 h-4" /> Book Discipleship Call
+          </button>
+        ) : (
+          <span className="text-xs text-stone-500 bg-stone-100 border border-stone-200 rounded-xl px-4 py-2.5">
+            You need an active mentor pairing to schedule a session.
+          </span>
+        )}
       </div>
 
       {/* Tabs */}
@@ -253,15 +230,9 @@ export const DiscipleshipSessionsView: React.FC<DiscipleshipSessionsViewProps> =
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-stone-700 uppercase tracking-wider">Senior Mentor</label>
-                  <select
-                    value={mentorName}
-                    onChange={(e) => setMentorName(e.target.value)}
-                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3.5 py-2 text-xs text-stone-900 focus:outline-none focus:border-amber-600"
-                  >
-                    <option value="Elder Thomas Bradley">Elder Thomas Bradley (Austin, TX)</option>
-                    <option value="Pastor Deborah Vance">Pastor Deborah Vance (Chicago, IL)</option>
-                    <option value="Dr. Samuel Osei">Dr. Samuel Osei (Atlanta, GA)</option>
-                  </select>
+                  <div className="w-full bg-stone-100 border border-stone-200 rounded-xl px-3.5 py-2 text-xs text-stone-700">
+                    {pairedMentor?.name ?? '—'}
+                  </div>
                 </div>
 
                 <div className="space-y-1">
@@ -297,27 +268,21 @@ export const DiscipleshipSessionsView: React.FC<DiscipleshipSessionsViewProps> =
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-stone-700 uppercase tracking-wider">Date & Time</label>
                   <input
-                    type="text"
-                    placeholder="e.g., Thursday, Sep 3 at 7:00 PM EST"
-                    value={dateTime}
-                    onChange={(e) => setDateTime(e.target.value)}
+                    type="datetime-local"
+                    required
+                    value={dateTimeLocal}
+                    onChange={(e) => setDateTimeLocal(e.target.value)}
                     className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3.5 py-2 text-xs text-stone-900 focus:outline-none focus:border-amber-600"
                   />
                 </div>
               </div>
 
-              <div className="p-3 bg-stone-50 rounded-xl border border-stone-200 flex items-center justify-between">
-                <div className="flex items-center gap-2 text-stone-800 text-xs">
-                  <CalendarDays className="w-4 h-4 text-amber-600" />
-                  <span className="font-semibold">Auto-Sync to Google Calendar with Meet Conferencing</span>
+              {platform === 'GOOGLE_MEET' && (
+                <div className="p-3 bg-stone-50 rounded-xl border border-stone-200 flex items-center gap-2 text-stone-500 text-xs">
+                  <CalendarDays className="w-4 h-4 text-stone-400" />
+                  <span>Google Calendar & Meet sync is being migrated to the backend and will return shortly.</span>
                 </div>
-                <input
-                  type="checkbox"
-                  checked={syncToGCal}
-                  onChange={(e) => setSyncToGCal(e.target.checked)}
-                  className="w-4 h-4 accent-amber-600 rounded"
-                />
-              </div>
+              )}
 
               <div className="space-y-1">
                 <label className="text-xs font-bold text-stone-700 uppercase tracking-wider">Scripture Focus</label>

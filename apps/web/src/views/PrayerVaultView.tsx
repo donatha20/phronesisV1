@@ -1,32 +1,42 @@
 import React, { useState } from 'react';
-import { 
-  Lock, Unlock, Shield, KeyRound, Plus, Heart, 
-  CheckCircle2, Sparkles, Filter, ShieldAlert, Eye, EyeOff 
+import {
+  Lock, Shield, Plus, Heart,
+  CheckCircle2, Sparkles, Loader2
 } from 'lucide-react';
-import { PrayerRequest, UserProfile, LifeSphere, PrayerPrivacyLevel, SecuritySettings } from '../types';
+import { PrayerRequest, UserProfile, LifeSphere, PrayerPrivacyLevel } from '../types';
+
+export interface CreatePrayerInput {
+  title: string;
+  prayerNeed: string;
+  sphere: string;
+  privacy: string;
+  tags: string[];
+}
 
 interface PrayerVaultViewProps {
   prayers: PrayerRequest[];
   currentUser: UserProfile;
-  security: SecuritySettings;
-  onAddPrayer: (newPrayer: PrayerRequest) => void;
+  vaultUnlocked: boolean;
+  onAddPrayer: (input: CreatePrayerInput) => void;
   onTogglePrayed: (id: string) => void;
   onMarkAnswered: (id: string, praiseReport: string) => void;
-  onUnlockVault: (pin: string) => boolean;
+  onUnlockVault: (password: string) => Promise<boolean>;
 }
 
 export const PrayerVaultView: React.FC<PrayerVaultViewProps> = ({
   prayers,
   currentUser,
-  security,
+  vaultUnlocked,
   onAddPrayer,
   onTogglePrayed,
   onMarkAnswered,
   onUnlockVault
 }) => {
-  const [isUnlocked, setIsUnlocked] = useState(!security.isVaultLocked);
-  const [pinInput, setPinInput] = useState('');
-  const [pinError, setPinError] = useState('');
+  const [lockedOverride, setLockedOverride] = useState(false);
+  const isUnlocked = vaultUnlocked && !lockedOverride;
+  const [passwordInput, setPasswordInput] = useState('');
+  const [unlockError, setUnlockError] = useState('');
+  const [isUnlocking, setIsUnlocking] = useState(false);
   const [privacyFilter, setPrivacyFilter] = useState<string>('ALL');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [answeringPrayerId, setAnsweringPrayerId] = useState<string | null>(null);
@@ -39,14 +49,23 @@ export const PrayerVaultView: React.FC<PrayerVaultViewProps> = ({
   const [privacy, setPrivacy] = useState<PrayerPrivacyLevel>('PRIVATE_VAULT');
   const [tagsText, setTagsText] = useState('Prayer, Faith');
 
-  const handleUnlock = (e: React.FormEvent) => {
+  const handleUnlock = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (onUnlockVault(pinInput) || pinInput === '1234') {
-      setIsUnlocked(true);
-      setPinError('');
-      setPinInput('');
-    } else {
-      setPinError('Incorrect PIN. Try 1234 (default sample PIN).');
+    if (!passwordInput) return;
+    setIsUnlocking(true);
+    setUnlockError('');
+    try {
+      const ok = await onUnlockVault(passwordInput);
+      if (ok) {
+        setLockedOverride(false);
+        setPasswordInput('');
+      } else {
+        setUnlockError('Incorrect password.');
+      }
+    } catch {
+      setUnlockError('Incorrect password.');
+    } finally {
+      setIsUnlocking(false);
     }
   };
 
@@ -54,27 +73,14 @@ export const PrayerVaultView: React.FC<PrayerVaultViewProps> = ({
     e.preventDefault();
     if (!title.trim() || !prayerNeed.trim()) return;
 
-    const newReq: PrayerRequest = {
-      id: `pray_${Date.now()}`,
-      authorName: currentUser.name,
-      authorId: currentUser.id,
+    onAddPrayer({
       title: title.trim(),
       prayerNeed: prayerNeed.trim(),
-      categorySphere: sphere,
-      privacyLevel: privacy,
-      isAnswered: false,
-      createdAt: 'Today',
-      intercessorsCount: 1,
-      isPrayedByMe: true,
-      isEncrypted: privacy !== 'COMMUNITY_INTERCESSORS',
-      cipherHint: privacy === 'PRIVATE_VAULT' ? 'Encrypted in Biometric Vault' : 'Authorized Mentors Only',
-      tags: tagsText.split(',').map(t => t.trim()).filter(Boolean)
-    };
-
-    onAddPrayer(newReq);
+      sphere,
+      privacy,
+      tags: tagsText.split(',').map(t => t.trim()).filter(Boolean),
+    });
     setIsAddModalOpen(false);
-
-    // Reset
     setTitle('');
     setPrayerNeed('');
   };
@@ -99,22 +105,23 @@ export const PrayerVaultView: React.FC<PrayerVaultViewProps> = ({
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <span className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-100 text-amber-900">
-              End-to-End Encrypted Vault
+              Private Prayer Vault
             </span>
-            <span className="text-xs text-stone-500">Zero-Knowledge Private Prayer Journal</span>
+            <span className="text-xs text-stone-500">Private entries are visible only to you</span>
           </div>
           <h1 className="text-2xl font-bold font-serif-display text-stone-900">
             Prayer Vault & Praise Reports
           </h1>
           <p className="text-xs text-stone-600">
-            A secure spiritual sanctuary for intimate requests, intercessory burdens, and answered prayer testimonies.
+            A spiritual sanctuary for intimate requests, intercessory burdens, and answered prayer testimonies.
+            Private entries require re-entering your password to view.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           {isUnlocked ? (
             <button
-              onClick={() => setIsUnlocked(false)}
+              onClick={() => setLockedOverride(true)}
               className="px-4 py-2 rounded-xl bg-stone-900 hover:bg-stone-800 text-stone-200 text-xs font-bold transition flex items-center gap-2"
             >
               <Lock className="w-3.5 h-3.5 text-amber-400" /> Lock Vault
@@ -144,44 +151,36 @@ export const PrayerVaultView: React.FC<PrayerVaultViewProps> = ({
           <div className="space-y-2">
             <h3 className="text-xl font-bold font-serif-display text-white">Prayer Vault is Locked</h3>
             <p className="text-xs text-stone-400">
-              Enter your 4-digit PIN or use Biometrics to decrypt your private journal entries.
+              Re-enter your account password to view your private prayer entries.
             </p>
           </div>
 
           <form onSubmit={handleUnlock} className="space-y-4">
             <input
               type="password"
-              maxLength={4}
-              placeholder="Enter PIN (e.g. 1234)"
-              value={pinInput}
-              onChange={(e) => setPinInput(e.target.value)}
-              className="w-48 mx-auto text-center tracking-widest text-lg font-mono bg-stone-950 border border-stone-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-amber-500"
+              placeholder="Account password"
+              autoComplete="current-password"
+              value={passwordInput}
+              onChange={(e) => setPasswordInput(e.target.value)}
+              className="w-64 mx-auto text-center bg-stone-950 border border-stone-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-amber-500"
             />
 
-            {pinError && <p className="text-xs text-rose-400 font-semibold">{pinError}</p>}
+            {unlockError && <p className="text-xs text-rose-400 font-semibold">{unlockError}</p>}
 
-            <div className="flex gap-2 justify-center">
+            <div className="flex justify-center">
               <button
                 type="submit"
-                className="px-6 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold transition shadow-md"
+                disabled={isUnlocking}
+                className="px-6 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 disabled:opacity-60 text-white text-xs font-bold transition shadow-md flex items-center gap-2"
               >
+                {isUnlocking && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                 Unlock Vault
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsUnlocked(true);
-                  setPinError('');
-                }}
-                className="px-4 py-2.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 text-xs font-semibold"
-              >
-                Simulate TouchID / FaceID
               </button>
             </div>
           </form>
 
           <div className="text-[11px] text-stone-500 pt-2 border-t border-stone-800">
-            Protected by {security.encryptionAlgorithm}
+            Unlock lasts 10 minutes, then re-authentication is required again.
           </div>
         </div>
       ) : (
@@ -411,7 +410,7 @@ export const PrayerVaultView: React.FC<PrayerVaultViewProps> = ({
                   type="submit"
                   className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold transition shadow-sm"
                 >
-                  Encrypt & Save to Vault
+                  Save to Vault
                 </button>
               </div>
             </form>

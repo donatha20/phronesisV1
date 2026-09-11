@@ -1,14 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import {
-  UserProfile, DailyDevotion, GoalItem,
-  PodcastEpisode, DiscipleshipSession, PrayerRequest,
-  ResourceItem, SecuritySettings
+  UserProfile, PodcastEpisode, ResourceItem, SecuritySettings
 } from './types';
 import {
-  initialMentors, initialMentees, initialGoals,
-  initialDevotions, initialPodcasts, initialSessions,
-  initialPrayers, initialResources, initialSecurity
+  initialMentors, initialMentees, initialPodcasts, initialResources, initialSecurity
 } from './data/sampleData';
 import { Header, ActiveTab } from './components/Header';
 import { DashboardView } from './views/DashboardView';
@@ -32,6 +28,14 @@ import { useAuth } from './auth/AuthContext';
 import { AuthScreen } from './auth/AuthScreen';
 import { CallbackScreen } from './auth/CallbackScreen';
 import { apiUserToProfile } from './auth/adapt';
+
+import {
+  useGoals, useGoalMutations,
+  useDevotions, useDevotionComments, useDevotionMutations,
+  usePrayers, useVaultStatus, usePrayerMutations,
+  useSessions, useSessionMutations,
+  useMyMentorship,
+} from './api/hooks';
 
 const FullScreenLoader: React.FC = () => (
   <div className="min-h-screen bg-stone-50 flex items-center justify-center text-stone-400">
@@ -57,8 +61,7 @@ const AuthedApp: React.FC = () => {
   const apiUser = auth.user!;
 
   // Bridge the authenticated identity onto the legacy UserProfile shape the
-  // views still expect. Domain data (mentors, goals, devotions, …) is still
-  // seeded from sample data here and moves onto the API in phase P4.
+  // remaining (not-yet-migrated) views still expect.
   const bridgedUser = useMemo(
     () =>
       apiUserToProfile(
@@ -75,27 +78,46 @@ const AuthedApp: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('DASHBOARD');
 
-  const [devotions, setDevotions] = useState<DailyDevotion[]>(initialDevotions);
-  const [goals, setGoals] = useState<GoalItem[]>(initialGoals);
+  // ---- API-backed domains (goals, devotions, prayers, sessions) ----------
+  const goalsQuery = useGoals();
+  const goalMutations = useGoalMutations();
+  const goals = goalsQuery.data ?? [];
+
+  const devotionsQuery = useDevotions();
+  const devotionMutations = useDevotionMutations();
+  const devotions = devotionsQuery.data ?? [];
+  const [selectedDevotionId, setSelectedDevotionId] = useState<string | null>(null);
+  const commentsQuery = useDevotionComments(selectedDevotionId);
+  const comments = commentsQuery.data ?? [];
+
+  const prayersQuery = usePrayers();
+  const vaultStatusQuery = useVaultStatus();
+  const prayerMutations = usePrayerMutations();
+  const prayers = prayersQuery.data ?? [];
+
+  const sessionsQuery = useSessions();
+  const sessionMutations = useSessionMutations();
+  const sessions = sessionsQuery.data ?? [];
+  const myMentorshipQuery = useMyMentorship();
+  const pairedMentor = myMentorshipQuery.data
+    ? apiUser.role === 'mentor'
+      ? { id: myMentorshipQuery.data.mentee, name: myMentorshipQuery.data.mentee_name }
+      : { id: myMentorshipQuery.data.mentor, name: myMentorshipQuery.data.mentor_name }
+    : null;
+
+  // ---- Domains still seeded from sample data (migrate in a later pass) ---
   const [podcasts, setPodcasts] = useState<PodcastEpisode[]>(initialPodcasts);
-  const [sessions, setSessions] = useState<DiscipleshipSession[]>(initialSessions);
-  const [prayers, setPrayers] = useState<PrayerRequest[]>(initialPrayers);
   const [resources, setResources] = useState<ResourceItem[]>(initialResources);
   const [security, setSecurity] = useState<SecuritySettings>(initialSecurity);
   const [enrolledResourceIds, setEnrolledResourceIds] = useState<string[]>(['res_1', 'res_2']);
 
   // Modals & Floating Players
-  const [activeAudio, setActiveAudio] = useState<{ title: string; speaker: string; duration: number; url?: string } | null>({
-    title: initialDevotions[0].title,
-    speaker: initialDevotions[0].authorName,
-    duration: initialDevotions[0].audioDurationSeconds,
-    url: initialDevotions[0].audioVoiceNoteUrl
-  });
+  const [activeAudio, setActiveAudio] = useState<{ title: string; speaker: string; duration: number; url?: string } | null>(null);
   const [activeVideoModal, setActiveVideoModal] = useState<PodcastEpisode | null>(null);
-  const [activeLiveCallSession, setActiveLiveCallSession] = useState<DiscipleshipSession | null>(null);
+  const [activeLiveCallSession, setActiveLiveCallSession] = useState<import('./types').DiscipleshipSession | null>(null);
   const [isSpiritualAssistantOpen, setIsSpiritualAssistantOpen] = useState(false);
 
-  // Handlers
+  // Handlers (sample-data domains) ------------------------------------
   const handleAddNewUser = (newUser: UserProfile) => {
     if (newUser.role === 'MENTOR_ELDER') {
       setMentors([newUser, ...mentors]);
@@ -124,10 +146,7 @@ const AuthedApp: React.FC = () => {
       setEnrolledResourceIds([...enrolledResourceIds, resourceId]);
       setResources(prev => prev.map(r => {
         if (r.id === resourceId) {
-          return {
-            ...r,
-            enrolledUsersCount: (r.enrolledUsersCount || 10) + 1
-          };
+          return { ...r, enrolledUsersCount: (r.enrolledUsersCount || 10) + 1 };
         }
         return r;
       }));
@@ -139,54 +158,25 @@ const AuthedApp: React.FC = () => {
     mentee: UserProfile,
     application: any
   ) => {
+    // Sample-data profile bookkeeping only. The real pairing (which also
+    // creates the first discipleship session) happens server-side via
+    // POST /api/mentorship-applications/{id}/accept/ — see apps/mentorship.
     const updatedMentee: UserProfile = {
       ...mentee,
       assignedMentorId: mentor.id,
       assignedMentorName: mentor.name,
       pairedDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
     };
-
     const updatedMentor: UserProfile = {
       ...mentor,
       activeMenteesCount: (mentor.activeMenteesCount || 0) + 1
     };
 
-    const newSession: DiscipleshipSession = {
-      id: `session_${Date.now()}`,
-      menteeId: mentee.id,
-      menteeName: mentee.name,
-      mentorId: mentor.id,
-      mentorName: mentor.name,
-      scheduledTime: 'Upcoming Thursday at 7:00 PM EST',
-      durationMinutes: 45,
-      sphereFocus: application.chosenSphere || 'PERSONAL_GROWTH',
-      topic: `Discipleship Covenant & ${application.chosenSphere.replace('_', ' ')} Orientation`,
-      scriptureText: mentor.favoriteScripture || '2 Timothy 2:2',
-      platform: 'IN_APP_VIDEO',
-      status: 'SCHEDULED',
-      meetingNotes: `Introductory discipleship meeting requested by ${mentee.name}.\nFocus Burden: "${application.personalIntroduction}"\nDesired Goal: "${application.growthDesire}"`,
-      actionItems: [
-        'Read Ephesians Chapter 1 together',
-        'Establish weekly quiet-time schedule'
-      ],
-      postSessionPrayer: `Lord, bless this holy cross-generational pairing between Elder ${mentor.name} and ${mentee.name}. May wisdom and love abound.`
-    };
-
-    setSessions([newSession, ...sessions]);
     setMentors(mentors.map(m => m.id === mentor.id ? updatedMentor : m));
     setMentees(mentees.map(m => m.id === mentee.id ? updatedMentee : m));
     if (currentUser.id === mentee.id) {
       setCurrentUserOverride(updatedMentee);
     }
-  };
-
-  const handlePlayAudioDevotion = (dev: DailyDevotion) => {
-    setActiveAudio({
-      title: dev.title,
-      speaker: dev.authorName,
-      duration: dev.audioDurationSeconds,
-      url: dev.audioVoiceNoteUrl
-    });
   };
 
   const handlePlayAudioPodcast = (pod: PodcastEpisode) => {
@@ -196,54 +186,6 @@ const AuthedApp: React.FC = () => {
       duration: pod.durationSeconds,
       url: 'https://actions.google.com/sounds/v1/ambiences/gentle_stream.ogg'
     });
-  };
-
-  const handleCompleteSession = (sessionId: string, newNotes: string, actionItems: string[]) => {
-    setSessions(prev => prev.map(s => {
-      if (s.id === sessionId) {
-        return {
-          ...s,
-          status: 'COMPLETED',
-          meetingNotes: newNotes,
-          actionItems
-        };
-      }
-      return s;
-    }));
-  };
-
-  const handleAddPrayer = (newPrayer: PrayerRequest) => {
-    setPrayers([newPrayer, ...prayers]);
-  };
-
-  const handleTogglePrayed = (id: string) => {
-    setPrayers(prev => prev.map(p => {
-      if (p.id === id) {
-        return {
-          ...p,
-          isPrayedByMe: !p.isPrayedByMe,
-          intercessorsCount: p.isPrayedByMe ? p.intercessorsCount - 1 : p.intercessorsCount + 1
-        };
-      }
-      return p;
-    }));
-  };
-
-  const handleMarkAnswered = (id: string, praiseReport: string) => {
-    setPrayers(prev => prev.map(p => {
-      if (p.id === id) {
-        return {
-          ...p,
-          isAnswered: true,
-          praiseReport
-        };
-      }
-      return p;
-    }));
-  };
-
-  const handleUnlockVault = (pin: string) => {
-    return pin === security.pinCode || pin === '1234';
   };
 
   return (
@@ -271,7 +213,10 @@ const AuthedApp: React.FC = () => {
             onNavigate={(tab) => setActiveTab(tab)}
             onOpenSessionCall={(s) => setActiveLiveCallSession(s)}
             onOpenVideoModal={(p) => setActiveVideoModal(p)}
-            onPlayAudioDevotion={handlePlayAudioDevotion}
+            onPlayAudioDevotion={(dev) => setActiveAudio({
+              title: dev.title, speaker: dev.authorName,
+              duration: dev.audioDurationSeconds, url: dev.audioVoiceNoteUrl,
+            })}
           />
         )}
 
@@ -279,8 +224,15 @@ const AuthedApp: React.FC = () => {
           <DailyDevotionsView
             devotions={devotions}
             currentUser={currentUser}
-            onPlayAudio={handlePlayAudioDevotion}
-            onPostDevotion={(nd) => setDevotions([nd, ...devotions])}
+            comments={comments}
+            onSelectDevotion={setSelectedDevotionId}
+            onPlayAudio={(dev) => setActiveAudio({
+              title: dev.title, speaker: dev.authorName,
+              duration: dev.audioDurationSeconds, url: dev.audioVoiceNoteUrl,
+            })}
+            onCreateDevotion={(input) => devotionMutations.create.mutate(input)}
+            onAddComment={(devotionId, text) => devotionMutations.addComment.mutate({ devotionId, text })}
+            onToggleLike={(id, liked) => devotionMutations.toggleLike.mutate({ id, liked })}
           />
         )}
 
@@ -288,8 +240,10 @@ const AuthedApp: React.FC = () => {
           <SpheresGoalsView
             goals={goals}
             currentUser={currentUser}
-            onUpdateGoal={(ug) => setGoals(goals.map(g => g.id === ug.id ? ug : g))}
-            onCreateGoal={(ng) => setGoals([ng, ...goals])}
+            onToggleMilestone={(goalId, milestoneId, isCompleted) =>
+              goalMutations.toggleMilestone.mutate({ goalId, milestoneId, isCompleted })
+            }
+            onCreateGoal={(input) => goalMutations.create.mutate(input)}
           />
         )}
 
@@ -308,8 +262,19 @@ const AuthedApp: React.FC = () => {
           <DiscipleshipSessionsView
             sessions={sessions}
             currentUser={currentUser}
+            pairedMentor={pairedMentor}
             onOpenSessionCall={(s) => setActiveLiveCallSession(s)}
-            onScheduleSession={(ns) => setSessions([ns, ...sessions])}
+            onScheduleSession={(input) => sessionMutations.create.mutate({
+              menteeId: apiUser.role === 'mentor' ? input.mentorId : apiUser.id,
+              mentorId: apiUser.role === 'mentor' ? apiUser.id : input.mentorId,
+              scheduledAt: input.scheduledAt,
+              durationMinutes: 45,
+              sphereFocus: input.sphereFocus,
+              topic: input.topic,
+              scriptureText: input.scriptureText,
+              platform: input.platform,
+              meetingNotes: input.meetingNotes,
+            })}
           />
         )}
 
@@ -317,11 +282,21 @@ const AuthedApp: React.FC = () => {
           <PrayerVaultView
             prayers={prayers}
             currentUser={currentUser}
-            security={security}
-            onAddPrayer={handleAddPrayer}
-            onTogglePrayed={handleTogglePrayed}
-            onMarkAnswered={handleMarkAnswered}
-            onUnlockVault={handleUnlockVault}
+            vaultUnlocked={vaultStatusQuery.data?.unlocked ?? false}
+            onAddPrayer={(input) => prayerMutations.create.mutate(input)}
+            onTogglePrayed={(id) => {
+              const p = prayers.find(x => x.id === id);
+              prayerMutations.intercede.mutate({ id, praying: p?.isPrayedByMe ?? false });
+            }}
+            onMarkAnswered={(id, praiseReport) => prayerMutations.markAnswered.mutate({ id, praiseReport })}
+            onUnlockVault={async (password) => {
+              try {
+                await prayerMutations.unlockVault.mutateAsync(password);
+                return true;
+              } catch {
+                return false;
+              }
+            }}
           />
         )}
 
@@ -367,8 +342,9 @@ const AuthedApp: React.FC = () => {
           <GoogleCalendarMeetView
             currentUser={currentUser}
             sessions={sessions}
-            onSchedulePlatformSession={(newSession) => {
-              setSessions(prev => [newSession, ...prev]);
+            onSchedulePlatformSession={() => {
+              // Google Calendar/Meet sync moves server-side in migration phase P5;
+              // this surface is dormant until then (see services/googleAuth.ts).
             }}
           />
         )}
@@ -405,7 +381,9 @@ const AuthedApp: React.FC = () => {
       <LiveSessionCallModal
         session={activeLiveCallSession}
         onClose={() => setActiveLiveCallSession(null)}
-        onCompleteSession={handleCompleteSession}
+        onCompleteSession={(sessionId, notes, actionItems) =>
+          sessionMutations.complete.mutate({ id: sessionId, notes, actionItems })
+        }
       />
 
       <SpiritualAssistantModal

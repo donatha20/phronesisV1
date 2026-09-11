@@ -4,6 +4,7 @@ import secrets
 from urllib.parse import urlencode
 
 from dj_rest_auth.jwt_auth import set_jwt_cookies
+from dj_rest_auth.registration.views import RegisterView
 from dj_rest_auth.views import LoginView, LogoutView
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -41,6 +42,29 @@ class AuditedLoginView(LoginView):
         response = super().get_response()
         if getattr(self, "user", None) and self.user.is_authenticated:
             record(AuditAction.LOGIN, actor=self.user, metadata={"method": "password"})
+        return response
+
+
+class AuditedRegisterView(RegisterView):
+    """dj-rest-auth's RegisterView returns the JWT pair in the response body but
+    (unlike LoginView) never sets the cookies — so a fresh signup would otherwise
+    appear signed-out to a cookie-only client. Set them here, and audit.
+    """
+
+    def perform_create(self, serializer):  # type: ignore[no-untyped-def]
+        user = super().perform_create(serializer)
+        self._created_user = user
+        return user
+
+    def create(self, request, *args, **kwargs):  # type: ignore[no-untyped-def]
+        response = super().create(request, *args, **kwargs)
+        access = getattr(self, "access_token", None)
+        refresh = getattr(self, "refresh_token", None)
+        if access and refresh:
+            set_jwt_cookies(response, access, refresh)
+        user = getattr(self, "_created_user", None)
+        if user is not None and response.status_code == 201:
+            record(AuditAction.REGISTER, actor=user, metadata={"method": "password"})
         return response
 
 

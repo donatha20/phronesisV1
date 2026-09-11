@@ -3,19 +3,29 @@ import {
   Target, Plus, CheckCircle2, Circle, Sparkles, BookOpen, 
   MessageSquare, ShieldCheck, UserCheck, Calendar, ArrowUpRight 
 } from 'lucide-react';
-import { GoalItem, LifeSphere, UserProfile, MilestoneItem } from '../types';
+import { GoalItem, LifeSphere, UserProfile } from '../types';
+
+export interface CreateGoalInput {
+  title: string;
+  description: string;
+  sphere: string;
+  scriptureAnchor: string;
+  targetDate?: string;
+  checkInFrequency?: string;
+  milestones: string[];
+}
 
 interface SpheresGoalsViewProps {
   goals: GoalItem[];
   currentUser: UserProfile;
-  onUpdateGoal: (updatedGoal: GoalItem) => void;
-  onCreateGoal: (newGoal: GoalItem) => void;
+  onToggleMilestone: (goalId: string, milestoneId: string, isCompleted: boolean) => void;
+  onCreateGoal: (input: CreateGoalInput) => void;
 }
 
 export const SpheresGoalsView: React.FC<SpheresGoalsViewProps> = ({
   goals,
   currentUser,
-  onUpdateGoal,
+  onToggleMilestone,
   onCreateGoal
 }) => {
   const [selectedSphere, setSelectedSphere] = useState<LifeSphere | 'ALL'>('ALL');
@@ -43,54 +53,29 @@ export const SpheresGoalsView: React.FC<SpheresGoalsViewProps> = ({
     : goals.filter(g => g.sphere === selectedSphere);
 
   const toggleMilestone = (goal: GoalItem, milestoneId: string) => {
-    const updatedMilestones = goal.milestones.map(m => {
-      if (m.id === milestoneId) {
-        return { ...m, isCompleted: !m.isCompleted, completedDate: !m.isCompleted ? 'Today' : undefined };
-      }
-      return m;
-    });
-
-    const completedCount = updatedMilestones.filter(m => m.isCompleted).length;
-    const progressPercent = Math.round((completedCount / (updatedMilestones.length || 1)) * 100);
-
-    onUpdateGoal({
-      ...goal,
-      milestones: updatedMilestones,
-      progressPercent
-    });
+    const m = goal.milestones.find(x => x.id === milestoneId);
+    if (!m) return;
+    onToggleMilestone(goal.id, milestoneId, !m.isCompleted);
   };
 
   const handleCreateNewGoal = (e: React.FormEvent) => {
     e.preventDefault();
     if (!goalTitle.trim()) return;
 
-    const rawMilestones = goalMilestonesText
+    const milestones = goalMilestonesText
       .split('\n')
       .map(s => s.trim())
       .filter(Boolean);
 
-    const milestones: MilestoneItem[] = rawMilestones.length > 0
-      ? rawMilestones.map((m, i) => ({ id: `m_${Date.now()}_${i}`, title: m, isCompleted: false }))
-      : [{ id: `m_${Date.now()}_0`, title: 'Initial milestone step', isCompleted: false }];
-
-    const newGoal: GoalItem = {
-      id: `goal_${Date.now()}`,
-      sphere: goalSphere,
+    onCreateGoal({
       title: goalTitle.trim(),
       description: goalDescription.trim(),
-      scriptureAnchor: goalScripture.trim() || 'Proverbs 16:3 - "Commit to the Lord whatever you do, and he will establish your plans."',
-      targetDate: goalDate || '2026-11-30',
-      milestones,
-      status: 'ACTIVE',
-      mentorFeedback: 'Looking forward to walking alongside you in this sphere! Keep your eyes fixed on Christ.',
-      mentorApproved: true,
+      sphere: goalSphere,
+      scriptureAnchor: goalScripture.trim(),
+      targetDate: goalDate || undefined,
       checkInFrequency: 'Weekly',
-      progressPercent: 0,
-      createdBy: currentUser.name,
-      assignedTo: assignedMentor
-    };
-
-    onCreateGoal(newGoal);
+      milestones,
+    });
     setIsAddGoalModalOpen(false);
 
     // Reset
